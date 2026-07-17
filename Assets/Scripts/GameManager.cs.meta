@@ -1,0 +1,13 @@
+fileFormatVersion: 2
+guid: 97e87135ea3d7f649bf9f5bef3e680a5
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - playerDB: {fileID: 11400000, guid: 7319779f52a98ca4bbf3bea9e4079bb5, type: 2}
+  - droneTransform: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
