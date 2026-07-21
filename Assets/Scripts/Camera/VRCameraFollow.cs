@@ -7,8 +7,12 @@ public class VRCameraFollow : MonoBehaviour
 
     [Header("跟隨設定")]
     public float distance = 5.0f;     // 在無人機後方的水平距離
-    public float height = 2.0f;       // 在無人機上方的垂直距離
+    public float height = 0.8f;       // 在無人機上方的垂直距離
     public float smoothSpeed = 4.0f;  // 跟隨平滑速度 (數值越小越柔和，不易眩暈)
+
+    [Header("視角上下微調")]
+    [Tooltip("負值代表相機微低頭往下看（無人機會在畫面上方呈現）。建議範圍 -5 到 -15")]
+    public float pitchOffset = -10.0f;
 
     void LateUpdate()
     {
