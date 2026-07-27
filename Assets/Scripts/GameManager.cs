@@ -1,144 +1,121 @@
 ﻿using UnityEngine;
-using UnityEngine.SceneManagement;
+using System.Collections.Generic;
+using System.Linq; // 用於 OrderBy 排序
 
 public class GameManager : MonoBehaviour
 {
-    [Header("Database & Spawning")]
-    public PlayerDB playerDB; // 【新增】拖入你的 PlayerDB
-    //public Vector3 spawnPosition = new Vector3(0, 2f, 0); // 【新增】無人機起始位置
+    public static GameManager Instance;
 
-    public int totalCheckpoints = 7;
+    [Header("【無人機參照】")]
     public Transform droneTransform;
-    public string pythonPath = "python";
-    public string scriptPath = "C:\\Users\\csapo\\Desktop\\dronegame\\hand_tracker.py";
 
-    private int passedCheckpoints = 0;
-    private float elapsedTime = 0f;
-    private bool raceStarted = false;
-    private bool raceFinished = false;
-    private Vector3 lastDronePos;
-
-    private CheckpointRing[] rings;
-
-    private GUIStyle styleCounter;
-    private GUIStyle styleTimer;
-    private GUIStyle styleFinish;
-    private GUIStyle styleButton;
+    [Header("【檢查點系統 (Checkpoints)】")]
+    public CheckpointRing[] rings;
+    public int passedCheckpoints = 0;
+    public int totalCheckpoints = 7;
 
     void Awake()
     {
-        Invoke("InitRings", 0.1f);
+        Instance = this;
     }
 
-    void InitRings()
+    void Start()
     {
-        rings = FindObjectsOfType<CheckpointRing>();
-        System.Array.Sort(rings, (a, b) => a.checkpointIndex.CompareTo(b.checkpointIndex));
+        // 延遲 0.2 秒執行，確保 CourseBuilder 已生成好樹木與檢查圈
+        Invoke(nameof(InitializeGame), 0.2f);
+    }
+
+    private void InitializeGame()
+    {
+        InitializeCheckpoints();
+        FixTreeColliders();
+    }
+
+    /// <summary>
+    /// 自動抓取並初始化場景中所有的 CheckpointRing
+    /// </summary>
+    public void InitializeCheckpoints()
+    {
+        rings = FindObjectsByType<CheckpointRing>(FindObjectsSortMode.None)
+                .OrderBy(r => r.checkpointIndex)
+                .ToArray();
+
         totalCheckpoints = rings.Length;
+        passedCheckpoints = 0;
 
-        Debug.Log("Rings found: " + rings.Length);
-
-        if (rings.Length > 0)
-            rings[0].MarkActive();
-
-        if (droneTransform != null)
-            lastDronePos = droneTransform.position;
-
-        styleCounter = CreateStyle(Color.white, 26, TextAnchor.UpperRight);
-        styleTimer = CreateStyle(Color.yellow, 24, TextAnchor.UpperRight);
-        styleFinish = CreateStyle(Color.green, 40, TextAnchor.MiddleCenter);
-    }
-
-    GUIStyle CreateStyle(Color color, int size, TextAnchor anchor)
-    {
-        GUIStyle s = new GUIStyle();
-        s.normal.textColor = color;
-        s.fontSize = size;
-        s.fontStyle = FontStyle.Bold;
-        s.alignment = anchor;
-        return s;
-    }
-
-    void Update()
-    {
-        if (!raceFinished)
+        if (rings != null && rings.Length > 0)
         {
-            if (!raceStarted && droneTransform != null)
-            {
-                float moved = Vector3.Distance(droneTransform.position, lastDronePos);
-                if (moved > 0.001f)
-                    raceStarted = true;
-                lastDronePos = droneTransform.position;
-            }
-
-            if (raceStarted)
-                elapsedTime += Time.deltaTime;
+            rings[0].MarkActive();
+            Debug.Log($"[GameManager] 檢查點系統已初始化！共 {totalCheckpoints} 個。");
         }
     }
 
+    /// <summary>
+    /// 【核心修復】：自動校正所有樹冠碰撞體，使其嚴格限制在綠色樹木內部
+    /// </summary>
+    public void FixTreeColliders()
+    {
+        SphereCollider[] allSphereCols = FindObjectsByType<SphereCollider>(FindObjectsSortMode.None);
+        int fixedCount = 0;
+
+        foreach (SphereCollider sphereCol in allSphereCols)
+        {
+            // 搜尋名稱為 Sphere 且父物件包含 Tree 的樹冠
+            if (sphereCol.gameObject.name.Equals("Sphere") &&
+                sphereCol.transform.parent != null &&
+                sphereCol.transform.parent.name.Contains("Tree"))
+            {
+                Vector3 scale = sphereCol.transform.localScale;
+
+                float maxScaleAxis = Mathf.Max(scale.x, Mathf.Max(scale.y, scale.z)); // 15.081
+                float minHorizontalAxis = Mathf.Min(scale.x, scale.z);               // 11.5
+
+                if (maxScaleAxis > 0)
+                {
+                    // 抵銷 Unity 以最大 Y 軸計算碰撞球半徑的特性，強制縮回水平綠色邊界內 (乘 0.95 留 5% 緩衝)
+                    sphereCol.radius = (minHorizontalAxis / (maxScaleAxis * 2f)) * 0.95f;
+                    sphereCol.center = Vector3.zero;
+                    fixedCount++;
+                }
+            }
+        }
+
+        Debug.Log($"<color=cyan>[GameManager] 已自動修復 {fixedCount} 棵樹的碰撞體體積！</color>");
+    }
+
+    /// <summary>
+    /// 當無人機穿過 CheckpointRing 時呼叫
+    /// </summary>
     public void CheckpointPassed(int index)
     {
-        if (raceFinished) return;
-        if (index != passedCheckpoints) return;
-
-        rings[index].MarkPassed();
-        passedCheckpoints++;
-
-        if (passedCheckpoints < rings.Length)
-            rings[passedCheckpoints].MarkActive();
-
-        if (passedCheckpoints >= rings.Length)
-            raceFinished = true;
-    }
-
-    public void StartHandTracking()
-    {
-        System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo();
-        psi.FileName = "cmd.exe";
-        psi.Arguments = "/c py -3.11 \"" + scriptPath + "\"";
-        psi.UseShellExecute = true;
-        psi.WorkingDirectory = "C:\\Users\\csapo\\Desktop\\dronegame";
-        System.Diagnostics.Process.Start(psi);
-    }
-
-    void RestartGame()
-    {
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
-    }
-
-    void OnGUI()
-    {
-        if (styleCounter == null || styleTimer == null || styleFinish == null) return;
-
-        int screenW = Screen.width;
-
-        // Checkpoint counter – jobb felső sarok
-        GUI.Box(new Rect(screenW - 230, 10, 220, 50), "");
-        GUI.Label(new Rect(screenW - 225, 15, 210, 40),
-            $"Checkpoints:  {passedCheckpoints} / {totalCheckpoints}",
-            styleCounter);
-
-        // Timer – checkpoint counter alatt
-        GUI.Box(new Rect(screenW - 230, 65, 220, 45), "");
-        string timeStr = raceFinished ? $"FINISH: {elapsedTime:F2}s" :
-                         raceStarted ? $"Time: {elapsedTime:F2}s" : "Time: --";
-        GUI.Label(new Rect(screenW - 225, 70, 210, 40), timeStr, styleTimer);
-
-        // Hand Control gomb – bal oldal
-        if (GUI.Button(new Rect(10, 210, 200, 40), "Hand Control"))
+        if (index == passedCheckpoints)
         {
-            StartHandTracking();
-        }
+            passedCheckpoints++;
+            Debug.Log($"<color=green>[GameManager] 通過第 {index} 個檢查點！進度: {passedCheckpoints}/{totalCheckpoints}</color>");
 
-        // Finish felirat + Play Again gomb
-        if (raceFinished)
-        {
-            GUI.Label(new Rect(screenW / 2 - 200, Screen.height / 2 - 60, 400, 80),
-                $"FINISHED!  {elapsedTime:F2}s", styleFinish);
+            Vector3 newRespawnPos = rings[index].transform.position + Vector3.up * 0.5f;
 
-            if (GUI.Button(new Rect(screenW / 2 - 100, Screen.height / 2 + 40, 200, 50), "PLAY AGAIN"))
+            // 動態傳送最新重生點給無人機
+            if (droneTransform != null)
             {
-                RestartGame();
+                droneTransform.SendMessage("SetRespawnPoint", newRespawnPos, SendMessageOptions.DontRequireReceiver);
+            }
+            else
+            {
+                GameObject droneObj = GameObject.FindWithTag("Player");
+                if (droneObj != null)
+                {
+                    droneObj.SendMessage("SetRespawnPoint", newRespawnPos, SendMessageOptions.DontRequireReceiver);
+                }
+            }
+
+            if (passedCheckpoints < rings.Length)
+            {
+                rings[passedCheckpoints].MarkActive();
+            }
+            else
+            {
+                Debug.Log("<color=yellow>【通關】恭喜！已穿過所有檢查點！</color>");
             }
         }
     }

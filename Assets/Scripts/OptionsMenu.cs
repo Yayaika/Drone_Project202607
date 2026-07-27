@@ -1,53 +1,38 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.SceneManagement;
 
 public class OptionsMenu : MonoBehaviour
 {
-    public DroneController drone;
     private bool isOpen = false;
-
-    private float wasdMoveSpeed;
-    private float wasdVerticalSpeed;
-    private float wasdRotateSpeed;
-    private float handMoveSpeed;
-    private float handVerticalSpeed;
-    private float handRotateMultiplier;
-    private float handZSensitivity;
-
     private GUIStyle styleTitle;
-    private GUIStyle styleLabel;
-    private GUIStyle styleValue;
-
-    void Start()
-    {
-        wasdMoveSpeed = drone.moveSpeed;
-        wasdVerticalSpeed = drone.verticalSpeed;
-        wasdRotateSpeed = drone.rotateSpeed;
-        handMoveSpeed = 45f;
-        handVerticalSpeed = 45f;
-        handRotateMultiplier = 9f;
-        handZSensitivity = 5f;
-    }
 
     void Update()
     {
+        // 按下 ESC 開啟/關閉選單，並同步暫停/恢復遊戲時間
         if (Input.GetKeyDown(KeyCode.Escape))
+        {
             isOpen = !isOpen;
+            Time.timeScale = isOpen ? 0f : 1f;
+        }
 
+        // 按下 R 鍵快捷重新開始
         if (Input.GetKeyDown(KeyCode.R))
+        {
             RestartGame();
+        }
     }
 
     void RestartGame()
     {
+        Time.timeScale = 1f; // 恢復時間才能正常載入
         SceneManager.LoadScene(SceneManager.GetActiveScene().name);
     }
 
     void OnGUI()
     {
-        // ESC ikon mindig látható
+        // 上方 ESC 狀態提示列 (保留)
         GUI.Box(new Rect(Screen.width / 2 - 80, 10, 160, 30), "");
-        GUI.Label(new Rect(Screen.width / 2 - 75, 13, 150, 25), "ESC = Options", new GUIStyle()
+        GUI.Label(new Rect(Screen.width / 2 - 75, 13, 150, 25), "ESC = Menu", new GUIStyle()
         {
             fontSize = 16,
             fontStyle = FontStyle.Bold,
@@ -55,79 +40,49 @@ public class OptionsMenu : MonoBehaviour
             alignment = TextAnchor.MiddleCenter
         });
 
-        // Restart gomb – mindig látható
+        // 右下角 RESTART (R) 快捷按鈕 (保留)
         if (GUI.Button(new Rect(Screen.width - 130, Screen.height - 55, 120, 40), "RESTART (R)"))
+        {
             RestartGame();
+        }
 
         if (!isOpen) return;
         if (styleTitle == null) InitStyles();
 
-        int w = 440;
-        int h = 570;
+        // 縮小後的精簡面板尺寸 (260 x 200)
+        int w = 260;
+        int h = 200;
         int x = Screen.width / 2 - w / 2;
         int y = Screen.height / 2 - h / 2;
 
         GUI.Box(new Rect(x, y, w, h), "");
-        GUI.Label(new Rect(x + w / 2 - 60, y + 10, 200, 35), "OPTIONS", styleTitle);
+        GUI.Label(new Rect(x, y + 15, w, 30), "PAUSE", styleTitle);
 
-        int row = y + 55;
-        int col1 = x + 15;
-        int col2 = x + 210;
-        int col3 = x + 370;
-        int rowH = 42;
+        int btnW = 180;
+        int btnH = 35;
+        int btnX = x + (w - btnW) / 2;
+        int startY = y + 55;
 
-        // WASD
-        GUI.Label(new Rect(col1, row, 300, 25), "── WASD ──", styleLabel); row += 28;
-        wasdMoveSpeed = SliderRow(col1, col2, col3, row, "Move Speed", wasdMoveSpeed, 1f, 40f); row += rowH;
-        wasdVerticalSpeed = SliderRow(col1, col2, col3, row, "Vertical Speed", wasdVerticalSpeed, 1f, 20f); row += rowH;
-        wasdRotateSpeed = SliderRow(col1, col2, col3, row, "Rotate Speed", wasdRotateSpeed, 10f, 150f); row += rowH;
-
-        // Nyilak
-        GUI.Label(new Rect(col1, row, 300, 25), "── NYILAK ──", styleLabel); row += 28;
-        GUI.Label(new Rect(col1, row, 380, 25), "Nyilak = WASD sebességet használják", new GUIStyle()
+        // 1. 繼續遊戲
+        if (GUI.Button(new Rect(btnX, startY, btnW, btnH), "RESUME"))
         {
-            fontSize = 14,
-            normal = { textColor = Color.gray }
-        }); row += rowH;
-
-        // Hand Control
-        GUI.Label(new Rect(col1, row, 300, 25), "── HAND CONTROL ──", styleLabel); row += 28;
-        handMoveSpeed = SliderRow(col1, col2, col3, row, "Move Speed", handMoveSpeed, 1f, 200f); row += rowH;
-        handVerticalSpeed = SliderRow(col1, col2, col3, row, "Vertical Speed", handVerticalSpeed, 1f, 200f); row += rowH;
-        handRotateMultiplier = SliderRow(col1, col2, col3, row, "Rotate Speed", handRotateMultiplier, 0.5f, 50f); row += rowH;
-        handZSensitivity = SliderRow(col1, col2, col3, row, "Z Sensitivity", handZSensitivity, 1f, 30f); row += rowH;
-
-        // Azonnal alkalmaz
-        drone.moveSpeed = wasdMoveSpeed;
-        drone.verticalSpeed = wasdVerticalSpeed;
-        drone.rotateSpeed = wasdRotateSpeed;
-        drone.handMoveSpeed = handMoveSpeed;
-        drone.handVerticalSpeed = handVerticalSpeed;
-        drone.handRotateMultiplier = handRotateMultiplier;
-        drone.handZSensitivity = handZSensitivity;
-
-        // Reset + Bezárás gombok
-        if (GUI.Button(new Rect(x + w / 2 - 160, row + 5, 140, 38), "RESET"))
-        {
-            wasdMoveSpeed = 15f;
-            wasdVerticalSpeed = 8f;
-            wasdRotateSpeed = 60f;
-            handMoveSpeed = 45f;
-            handVerticalSpeed = 45f;
-            handRotateMultiplier = 9f;
-            handZSensitivity = 5f;
+            isOpen = false;
+            Time.timeScale = 1f;
         }
 
-        if (GUI.Button(new Rect(x + w / 2 + 20, row + 5, 140, 38), "BEZÁRÁS"))
-            isOpen = false;
-    }
+        // 2. 重新開始
+        if (GUI.Button(new Rect(btnX, startY + 42, btnW, btnH), "RESTART"))
+        {
+            RestartGame();
+        }
 
-    float SliderRow(int col1, int col2, int col3, int row, string label, float val, float min, float max)
-    {
-        GUI.Label(new Rect(col1, row, 200, 25), label, styleLabel);
-        float newVal = GUI.HorizontalSlider(new Rect(col2, row + 7, 140, 20), val, min, max);
-        GUI.Label(new Rect(col3, row, 70, 25), newVal.ToString("F1"), styleValue);
-        return newVal;
+        // 3. 離開遊戲
+        if (GUI.Button(new Rect(btnX, startY + 84, btnW, btnH), "QUIT"))
+        {
+            Time.timeScale = 1f;
+            Debug.Log("[OptionsMenu] 退出遊戲");
+            Application.Quit();
+        }
     }
 
     void InitStyles()
@@ -137,14 +92,5 @@ public class OptionsMenu : MonoBehaviour
         styleTitle.fontStyle = FontStyle.Bold;
         styleTitle.normal.textColor = Color.white;
         styleTitle.alignment = TextAnchor.MiddleCenter;
-
-        styleLabel = new GUIStyle();
-        styleLabel.fontSize = 16;
-        styleLabel.normal.textColor = Color.cyan;
-
-        styleValue = new GUIStyle();
-        styleValue.fontSize = 16;
-        styleValue.fontStyle = FontStyle.Bold;
-        styleValue.normal.textColor = Color.yellow;
     }
 }

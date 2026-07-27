@@ -871,7 +871,7 @@ MonoBehaviour:
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
           m_IntArgument: 0
           m_FloatArgument: 0
-          m_StringArgument: PlayerSettings
+          m_StringArgument: PlayerSelectSettings
           m_BoolArgument: 0
         m_CallState: 2
 --- !u!114 &475397112
@@ -2345,10 +2345,10 @@ SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
   - {fileID: 737973444}
+  - {fileID: 2070002597}
   - {fileID: 330585546}
   - {fileID: 410087041}
   - {fileID: 832575519}
-  - {fileID: 2070002597}
   - {fileID: 210538929}
   - {fileID: 701292457}
   - {fileID: 1342663998}

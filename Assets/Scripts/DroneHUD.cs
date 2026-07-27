@@ -38,7 +38,13 @@ public class DroneHUD : MonoBehaviour
         styleYellow = CreateStyle(Color.yellow, 22);
         styleCyan = CreateStyle(Color.cyan, 22);
 
-        // 【修改】相容新舊飛控的位置初始化
+        // 【新增】若沒有透過 SetDrone 設定，自動在場景中尋找新飛控
+        if (drone == null && _newDrone == null)
+        {
+            _newDrone = FindFirstObjectByType<DroneController1>();
+        }
+
+        // 相容新舊飛控的位置初始化
         Transform activeTransform = GetActiveTransform();
         if (activeTransform != null)
         {
@@ -63,11 +69,12 @@ public class DroneHUD : MonoBehaviour
         return null;
     }
 
-    // 🌟【新增輔助】取得當前無人機的飛行狀態 (舊飛控讀 isFlying，新飛控讀是否離地)
+    // 取得當前無人機的飛行狀態
     private bool IsDroneFlying()
     {
         if (drone != null) return drone.isFlying;
-        if (_newDrone != null) return !_newDrone.isGrounded;
+        // 【修正】新飛控以「引擎已解鎖 且 不在地面上」判定為飛行中，若在地面但已解鎖則視情況可調
+        if (_newDrone != null) return _newDrone.isArmed && !_newDrone.isGrounded;
         return false;
     }
 

@@ -47,5 +47,5 @@ MonoBehaviour:
   _playerDB: {fileID: 11400000, guid: 7319779f52a98ca4bbf3bea9e4079bb5, type: 2}
   courseBuilder: {fileID: 0}
   droneHUD: {fileID: 0}
-  cameraFollow: {fileID: 0}
+  vrCameraFollow: {fileID: 0}
   gameManager: {fileID: 0}

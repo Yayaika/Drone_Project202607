@@ -38,7 +38,7 @@ public class CourseBuilder : MonoBehaviour
 
             Vector3 ringPos = new Vector3(x, y, z);
             CreateCheckpointRing(ringPos, i);
-            criticalPositions.Add(ringPos); // 記錄此檢查點
+            criticalPositions.Add(ringPos);
         }
 
         // 生成樹木（加入避開邏輯）
@@ -48,7 +48,6 @@ public class CourseBuilder : MonoBehaviour
             bool validPos = false;
             int attempts = 0;
 
-            // 嘗試尋找不會擋到路的位置（最多嘗試 100 次防死循環）
             while (!validPos && attempts < 100)
             {
                 attempts++;
@@ -58,10 +57,8 @@ public class CourseBuilder : MonoBehaviour
 
                 validPos = true;
 
-                // 比對所有關鍵點
                 foreach (Vector3 critPos in criticalPositions)
                 {
-                    // 僅比對水平面 (XZ)，因為高處的檢查圈投影到地面依然不能有樹幹擋住
                     float distanceXZ = Vector2.Distance(
                         new Vector2(treePos.x, treePos.z),
                         new Vector2(critPos.x, critPos.z)
@@ -69,7 +66,7 @@ public class CourseBuilder : MonoBehaviour
 
                     if (distanceXZ < safetyRadius)
                     {
-                        validPos = false; // 離起終點或圈圈太近，此位置失效
+                        validPos = false;
                         break;
                     }
                 }
@@ -84,22 +81,36 @@ public class CourseBuilder : MonoBehaviour
 
     void CreatePlatform(Vector3 pos, Color color, string label)
     {
+        // 1. 平台本體
         GameObject platform = GameObject.CreatePrimitive(PrimitiveType.Cube);
         platform.name = label + "_Platform";
         platform.transform.position = pos + Vector3.up * 0.25f;
         platform.transform.localScale = new Vector3(8f, 0.5f, 8f);
         platform.GetComponent<Renderer>().material.color = color;
 
-        GameObject pole = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-        pole.name = label + "_Pole";
-        pole.transform.position = pos + Vector3.up * 2f;
-        pole.transform.localScale = new Vector3(0.3f, 2f, 0.3f);
-        pole.GetComponent<Renderer>().material.color = Color.gray;
+        // 【修正核心問題】將原本卡在平台中央 (0,0,0) 的單一柱子，移至左右兩側做成拱門 (Gate)
+        // 徹底清空起點中央區域，讓無人機重生時絕不會再撞到柱子模型內！
+        float poleXOffset = 3.8f;
 
+        // 左側門柱
+        GameObject poleL = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        poleL.name = label + "_Pole_L";
+        poleL.transform.position = pos + new Vector3(-poleXOffset, 2f, 0f);
+        poleL.transform.localScale = new Vector3(0.3f, 2f, 0.3f);
+        poleL.GetComponent<Renderer>().material.color = Color.gray;
+
+        // 右側門柱
+        GameObject poleR = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        poleR.name = label + "_Pole_R";
+        poleR.transform.position = pos + new Vector3(poleXOffset, 2f, 0f);
+        poleR.transform.localScale = new Vector3(0.3f, 2f, 0.3f);
+        poleR.GetComponent<Renderer>().material.color = Color.gray;
+
+        // 拱門頂部橫樑標示牌
         GameObject sign = GameObject.CreatePrimitive(PrimitiveType.Cube);
         sign.name = label + "_Sign";
-        sign.transform.position = pos + Vector3.up * 4.5f;
-        sign.transform.localScale = new Vector3(4f, 1f, 0.2f);
+        sign.transform.position = pos + Vector3.up * 4.2f;
+        sign.transform.localScale = new Vector3(8f, 0.6f, 0.3f);
         sign.GetComponent<Renderer>().material.color = color;
     }
 
@@ -140,12 +151,14 @@ public class CourseBuilder : MonoBehaviour
         tree.transform.position = pos;
 
         float height = Random.Range(9f, 20f);
+        float trunkThickness = Random.Range(0.8f, 1.5f);
 
         GameObject trunk = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         trunk.transform.parent = tree.transform;
         trunk.transform.localPosition = Vector3.up * height * 0.5f;
-        float trunkThickness = Random.Range(0.8f, 1.5f);
-        trunk.transform.localScale = new Vector3(0.4f, height * 0.5f, trunkThickness);
+
+        // 【修正】將樹幹粗細鎖定為正比例 (trunkThickness)，消除非對稱縮放產生的幾何異常
+        trunk.transform.localScale = new Vector3(trunkThickness, height * 0.5f, trunkThickness);
         trunk.GetComponent<Renderer>().material.color = new Color(0.35f, 0.2f, 0.08f);
 
         GameObject leaves = GameObject.CreatePrimitive(PrimitiveType.Sphere);

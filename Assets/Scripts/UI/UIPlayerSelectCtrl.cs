@@ -54,12 +54,21 @@ public class UIPlayerSelectCtrl : MonoBehaviour
         {
             if (option.droneModel != null)
             {
+                // 【新增】凍結 Rigidbody 物理，防止重力讓無人機掉落
+                var rb = option.droneModel.GetComponent<Rigidbody>();
+                if (rb != null)
+                {
+                    rb.isKinematic = true;
+                    rb.linearVelocity = Vector3.zero;
+                    rb.angularVelocity = Vector3.zero;
+                }
+
                 // 關閉 CharacterController 避免重力影響與物理碰撞
                 var cc = option.droneModel.GetComponent<CharacterController>();
                 if (cc != null) cc.enabled = false;
 
                 // 關閉控制腳本，杜絕鍵盤輸入偵測
-                var controller = option.droneModel.GetComponent<DroneController>();
+                var controller = option.droneModel.GetComponent<DroneController1>();
                 if (controller != null) controller.enabled = false;
 
                 // 關閉 UDP 接收
@@ -84,7 +93,7 @@ public class UIPlayerSelectCtrl : MonoBehaviour
                 charOptions[i].toggle.isOn = isSelected;
             }
 
-            // 切換虛擬相機優先級 (VR 模式中如不需要可忽略)
+            // 切換虛擬相機優先級
             if (charOptions[i].vCam != null)
             {
                 charOptions[i].vCam.Priority.Enabled = isSelected;
@@ -95,22 +104,23 @@ public class UIPlayerSelectCtrl : MonoBehaviour
             {
                 charOptions[i].droneModel.SetActive(isSelected);
 
-                // 如果是被選中的無人機，將其定位在展示點並加上我們指定的傾斜旋轉角
+                // 如果是被選中的無人機，將其定位在展示點並加上指定旋轉角
                 if (isSelected && _previewAnchor != null)
                 {
                     charOptions[i].droneModel.transform.position = _previewAnchor.position;
-
-                    // 計算結合展示點旋轉與自訂偏移量
                     Quaternion targetRotation = _previewAnchor.rotation * Quaternion.Euler(_previewRotationOffset);
                     charOptions[i].droneModel.transform.rotation = targetRotation;
                 }
             }
         }
 
+        // 【修正】移除 .Datas.Count，直接透過 GetPlayerData 取得資料
         if (_playerDB != null)
         {
-            _textName.text = _playerDB.GetPlayerData(index).name;
-            _textDesc.text = _playerDB.GetPlayerData(index).desc;
+            var data = _playerDB.GetPlayerData(index);
+            if (_textName != null) _textName.text = data.name;
+            if (_textDesc != null) _textDesc.text = data.desc;
+       
         }
     }
 

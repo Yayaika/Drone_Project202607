@@ -83,8 +83,13 @@ public class DroneController : MonoBehaviour
         if (Input.GetKey(KeyCode.LeftArrow)) rot = -1f;
         if (Input.GetKey(KeyCode.RightArrow)) rot = 1f;
 
+        // 【修正點 1】執行鍵盤左右方向鍵的原地自轉 (Yaw)
+        if (rot != 0f)
+        {
+            transform.Rotate(Vector3.up, rot * rotateSpeed * Time.deltaTime);
+        }
+
         // --- 【核心修改區：基於鏡頭的方向計算】 ---
-        // 確保 cameraTransform 已經在 Inspector 中指定
         if (cameraTransform != null)
         {
             Vector3 camForward = cameraTransform.forward;
@@ -104,8 +109,8 @@ public class DroneController : MonoBehaviour
             Vector3 verticalVelocity = Vector3.up * y * verticalSpeed;
             cc.Move((moveVelocity + verticalVelocity) * Time.deltaTime);
 
-            // 讓無人機轉向移動方向 (這會取代原本純粹由鍵盤控制的 rot)
-            if (moveDirection.sqrMagnitude > 0.01f)
+            // 【修正點 2】僅在未手動按左右鍵旋轉時，才自動讓無人機轉向移動方向
+            if (moveDirection.sqrMagnitude > 0.01f && rot == 0f)
             {
                 Quaternion targetRotation = Quaternion.LookRotation(moveDirection);
                 transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotateSpeed * Time.deltaTime * 0.1f);
