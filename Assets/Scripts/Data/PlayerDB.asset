@@ -15,14 +15,14 @@ MonoBehaviour:
   datas:
   - name: "\u7121\u4EBA\u6A5F1"
     desc: "\u7D05\u8272"
-    icon: {fileID: 21300000, guid: a2d9214c010ac99418bcb08cbada0ccd, type: 3}
-    playerCtrl: {fileID: -1103869077506144860, guid: e746f881748d3a147949e70e5c570880, type: 3}
+    playerObj: {fileID: 5054379811673952670, guid: e746f881748d3a147949e70e5c570880, type: 3}
   - name: "\u7121\u4EBA\u6A5F2"
     desc: "\u9ED1\u8272\u5916\u6BBC\uFF0C\u901F\u5EA6\u5FEB"
-    icon: {fileID: 21300000, guid: a8b106aaa4a25af47a0a0243b831192d, type: 3}
-    playerCtrl: {fileID: 5969051235248222460, guid: c53e58c59cba20e4ab6f2080fbdafb5f, type: 3}
+    playerObj: {fileID: 7231887364440564934, guid: c53e58c59cba20e4ab6f2080fbdafb5f, type: 3}
   - name: "\u7121\u4EBA\u6A5F3"
     desc: "\u9EC3\u8272"
-    icon: {fileID: 21300000, guid: 79750916f81982645bcdb32f8ef49fe3, type: 3}
-    playerCtrl: {fileID: 7258732006496211666, guid: b8c5de00063898242910230cb837de87, type: 3}
-  selectedIndex: 1
+    playerObj: {fileID: 5924121413617780456, guid: b8c5de00063898242910230cb837de87, type: 3}
+  - name: "\u7121\u4EBA\u6A5F4"
+    desc: "\u5C0F\u5DE7"
+    playerObj: {fileID: 6496504088213243553, guid: 14aeb4f94f73915458b643b5500a093a, type: 3}
+  selectedIndex: 3

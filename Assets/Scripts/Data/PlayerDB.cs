@@ -19,8 +19,8 @@ public struct PlayerData
     /// <summary>
     /// 代表性圖標
     /// </summary>
-    public Sprite icon;
-    public DroneController playerCtrl; // 這裡儲存你的無人機 Prefab
+    //public Sprite icon;
+    public GameObject playerObj; // 這裡儲存你的無人機 Prefab
 }
 
 /// <summary>
@@ -31,7 +31,7 @@ public class PlayerDB : ScriptableObject
 {
     public PlayerData[] datas; // 角色資料陣列
 
-    // 🌟 【新增這行】用來儲存目前玩家選取的是哪一個 Index
+    // 【新增這行】用來儲存目前玩家選取的是哪一個 Index
     public int selectedIndex;
 
     /// <summary>
