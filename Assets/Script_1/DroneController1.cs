@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.InputSystem;
+using TMPro; // 【新增】用於支援 World Space Canvas 的 TextMeshPro 文字顯示
 
 public class DroneController1 : MonoBehaviour
 {
@@ -18,7 +19,7 @@ public class DroneController1 : MonoBehaviour
 
     [Header("【控制反轉設定 (Controls Inversion)】")]
     [Tooltip("按鍵 T 可在運行中即時切換。勾選時右搖桿/方向鍵輸入反轉")]
-    public bool isInverted = false;
+    public bool isInverted = true; // 🌟【已修改】預設反轉開關改為 true
 
     [Header("【核心動力與定高 (Core Physics)】")]
     [SerializeField] private float maxThrust = 40f;
@@ -41,12 +42,24 @@ public class DroneController1 : MonoBehaviour
     public bool IsEngineStarted => isArmed;
     public float CurrentRPM => currentVisualRpm;
 
-    [Header("【攝影機系統 (Camera System)】")]
-    [SerializeField] private Transform cameraTarget;
-    [SerializeField] private Vector3 cameraOffset = new Vector3(0f, 1.5f, -3.5f);
-    [SerializeField] private float cameraSmoothTime = 0.05f;
-    [SerializeField] private GameObject[] droneCameras;
+    [Header("【攝影機系統 (Single XR Origin)】")]
+    [Tooltip("唯一的 XR Origin Transform，避免 VR 多 Origin 導致的輸入與渲染衝突")]
+    [SerializeField] private Transform xrOriginTransform;
+
+    [Tooltip("兩個視角的掛載空物件錨點 (例如 Element 0: FPV_CamPos, Element 1: TPV_CamPos)")]
+    [SerializeField] private Transform[] cameraPositions;
     private int currentCameraIndex = 0;
+
+    [Header("【VR World Space UI 介面】")]
+    [Tooltip("若使用跟隨無人機的 World Space Canvas，請拖入對應 TextMeshProUGUI 組件")]
+    [SerializeField] private TextMeshProUGUI statusText;
+    [SerializeField] private TextMeshProUGUI altitudeText;
+    [SerializeField] private TextMeshProUGUI headingText;
+    [SerializeField] private TextMeshProUGUI positionText;
+    [SerializeField] private TextMeshProUGUI speedText;
+
+    private Vector3 lastPos;
+    private float currentSpeed;
 
     [Header("【音效系統 (Audio Setup)】")]
     [SerializeField] private AudioSource engineAudioSource;
@@ -59,7 +72,7 @@ public class DroneController1 : MonoBehaviour
     [SerializeField] private Vector3 respawnPosition = new Vector3(0f, 0.5f, 0f);
     private bool isFlipping = false;
 
-    // --- 【新增】防吸附/防貼牆機制變數 ---
+    // --- 防吸附/防貼牆機制變數 ---
     private bool isTouchingWall = false;
 
     // --- 輸入系統 (Input Actions) ---
@@ -139,7 +152,7 @@ public class DroneController1 : MonoBehaviour
         rb = GetComponent<Rigidbody>();
         if (rb == null) rb = gameObject.AddComponent<Rigidbody>();
 
-        // 🌟 強制將重心鎖定在正中心，避免大推力轉化為自轉力矩
+        // 強制將重心鎖定在正中心，避免大推力轉化為自轉力矩
         rb.centerOfMass = Vector3.zero;
 
         rb.mass = 1.0f;
@@ -149,7 +162,7 @@ public class DroneController1 : MonoBehaviour
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
 
-        // 🌟【修復吸附 Bug】自動生成零摩擦力 + 微彈性物理材質
+        // 自動生成零摩擦力 + 微彈性物理材質
         ApplyFrictionlessMaterial();
 
         if (engineAudioSource != null)
@@ -164,10 +177,11 @@ public class DroneController1 : MonoBehaviour
         InitializeCameras();
 
         targetYawAngle = transform.eulerAngles.y;
+        lastPos = transform.position;
     }
 
     /// <summary>
-    /// 🌟 為無人機所有碰撞器賦予零摩擦材質，防止與牆面產生靜摩擦力吸附
+    /// 為無人機所有碰撞器賦予零摩擦材質，防止與牆面產生靜摩擦力吸附
     /// </summary>
     private void ApplyFrictionlessMaterial()
     {
@@ -198,6 +212,7 @@ public class DroneController1 : MonoBehaviour
         HandleArmingState();
         UpdatePropellersVisual();
         UpdateAudio();
+        UpdateHUDData(); // 【新增】即時更新 World Space Canvas 的飛行數據
 
         wasGroundedLastFrame = isGrounded;
     }
@@ -212,13 +227,13 @@ public class DroneController1 : MonoBehaviour
             ApplyFlightPhysics();
         }
 
+        // 定期平滑同步/維護攝影機相對位置 (若有平滑追蹤需求)
         UpdateCameraPosition();
     }
 
-    // 🌟【碰撞防吸附判斷】
+    // 碰撞防吸附判斷
     private void OnCollisionStay(Collision collision)
     {
-        // 若碰撞對象不是地面，判定為撞牆/撞物體
         if (!isGrounded)
         {
             isTouchingWall = true;
@@ -342,7 +357,7 @@ public class DroneController1 : MonoBehaviour
 
         rb.AddForce(transform.up * finalThrust, ForceMode.Acceleration);
 
-        // 🌟【修復吸附 Bug】撞牆時停用水平推進力，防止強行擠壓貼牆
+        // 撞牆時停用水平推進力，防止強行擠壓貼牆
         if (!isTouchingWall)
         {
             Vector3 horizontalDirection = new Vector3(transform.up.x, 0, transform.up.z);
@@ -417,20 +432,23 @@ public class DroneController1 : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 【修改】將單一 XR Origin 的 Transform 綁定/移動至指定的鏡頭空物件錨點
+    /// </summary>
     private void UpdateCameraPosition()
     {
-        if (droneCameras == null || droneCameras.Length <= currentCameraIndex) return;
+        if (xrOriginTransform == null || cameraPositions == null || cameraPositions.Length <= currentCameraIndex) return;
 
-        GameObject activeCamObj = droneCameras[currentCameraIndex];
-        if (activeCamObj == null) return;
+        Transform targetAnchor = cameraPositions[currentCameraIndex];
+        if (targetAnchor == null) return;
 
-        if (activeCamObj.transform.IsChildOf(transform)) return;
-
-        Quaternion desiredWorldRotation = Quaternion.Euler(0f, transform.eulerAngles.y, 0f);
-        Vector3 desiredWorldPosition = transform.position + (desiredWorldRotation * cameraOffset);
-
-        activeCamObj.transform.position = Vector3.Lerp(activeCamObj.transform.position, desiredWorldPosition, Time.deltaTime / cameraSmoothTime);
-        activeCamObj.transform.rotation = Quaternion.Slerp(activeCamObj.transform.rotation, desiredWorldRotation, Time.deltaTime / cameraSmoothTime);
+        // 若 XR Origin 尚未設置為錨點的子物件，自動進行父子繫結
+        if (xrOriginTransform.parent != targetAnchor)
+        {
+            xrOriginTransform.SetParent(targetAnchor);
+            xrOriginTransform.localPosition = Vector3.zero;
+            xrOriginTransform.localRotation = Quaternion.identity;
+        }
     }
 
     private void ToggleFlightMode()
@@ -439,38 +457,26 @@ public class DroneController1 : MonoBehaviour
         targetYawAngle = transform.eulerAngles.y;
     }
 
+    /// <summary>
+    /// 【修改】視角切換方法：不再關閉/開啟 GameObject，改為切換單一 XR Origin 所掛載的空物件錨點
+    /// </summary>
     private void SwitchCamera()
     {
-        if (droneCameras == null || droneCameras.Length <= 1) return;
+        if (cameraPositions == null || cameraPositions.Length <= 1 || xrOriginTransform == null) return;
 
-        // 1. 關閉當前正在使用的鏡頭物件
-        if (droneCameras[currentCameraIndex] != null)
+        // 切換下一個視角索引
+        currentCameraIndex = (currentCameraIndex + 1) % cameraPositions.Length;
+
+        // 即時設定 XR Origin 位置
+        Transform targetPos = cameraPositions[currentCameraIndex];
+        if (targetPos != null)
         {
-            droneCameras[currentCameraIndex].SetActive(false);
+            xrOriginTransform.SetParent(targetPos);
+            xrOriginTransform.localPosition = Vector3.zero;
+            xrOriginTransform.localRotation = Quaternion.identity;
         }
 
-        // 2. 計算下一個鏡頭索引
-        currentCameraIndex = (currentCameraIndex + 1) % droneCameras.Length;
-
-        // 3. 開啟新鏡頭物件
-        GameObject nextCamObj = droneCameras[currentCameraIndex];
-        if (nextCamObj != null)
-        {
-            nextCamObj.SetActive(true);
-
-            // 4. 自動處理聲音：確保只有「當前開啟的鏡頭」有 AudioListener
-            AudioListener activeListener = nextCamObj.GetComponentInChildren<AudioListener>(true);
-            if (activeListener != null)
-            {
-                AudioListener[] allListeners = FindObjectsByType<AudioListener>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-                foreach (var listener in allListeners)
-                {
-                    listener.enabled = (listener == activeListener);
-                }
-            }
-        }
-
-        Debug.Log($"[DroneController] 已切換至第 {currentCameraIndex + 1} 個鏡頭: {droneCameras[currentCameraIndex].name}");
+        Debug.Log($"[DroneController] 已成功切換至視角 {currentCameraIndex + 1}: {(targetPos != null ? targetPos.name : "Unassigned")}");
     }
 
     private void Respawn()
@@ -507,13 +513,42 @@ public class DroneController1 : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 【修改】初始化攝影機系統：將唯一的 XR Origin 置於第 1 個預設視角位置 (Element 0)
+    /// </summary>
     private void InitializeCameras()
     {
-        if (droneCameras == null) return;
-        for (int i = 0; i < droneCameras.Length; i++)
+        if (xrOriginTransform != null && cameraPositions != null && cameraPositions.Length > 0 && cameraPositions[0] != null)
         {
-            if (droneCameras[i] != null) droneCameras[i].SetActive(i == 0);
+            currentCameraIndex = 0;
+            xrOriginTransform.SetParent(cameraPositions[0]);
+            xrOriginTransform.localPosition = Vector3.zero;
+            xrOriginTransform.localRotation = Quaternion.identity;
         }
-        currentCameraIndex = 0;
+    }
+
+    /// <summary>
+    /// 【新增】刷新 World Space UI 上的動態數據 (替代舊有 Screen-Space OnGUI)
+    /// </summary>
+    private void UpdateHUDData()
+    {
+        // 計算當前速度 (m/s)
+        currentSpeed = (transform.position - lastPos).magnitude / Time.deltaTime;
+        lastPos = transform.position;
+
+        float altitude = Mathf.Max(0f, transform.position.y - 1.5f);
+        bool isFlying = isArmed && !isGrounded;
+        Vector3 pos = transform.position;
+        float yaw = transform.eulerAngles.y;
+
+        if (statusText != null)
+        {
+            statusText.text = $"Status:    {(isFlying ? "FLYING" : "GROUNDED")}";
+            statusText.color = isFlying ? Color.green : Color.red;
+        }
+        if (altitudeText != null) altitudeText.text = $"Altitude:  {altitude:F1} m";
+        if (headingText != null) headingText.text = $"Heading:   {yaw:F0}°";
+        if (positionText != null) positionText.text = $"Position:  X:{pos.x:F1}  Z:{pos.z:F1}";
+        if (speedText != null) speedText.text = $"Speed:     {currentSpeed:F1} m/s";
     }
 }
