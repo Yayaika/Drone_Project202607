@@ -1,18 +1,43 @@
 ﻿using UnityEngine;
-using System.Collections.Generic;
-using System.Linq; // 用於 OrderBy 排序
+using System.Linq;
+using TMPro;
+using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance;
 
-    [Header("【無人機參照】")]
+    [Header("【Drone Reference】")]
     public Transform droneTransform;
 
-    [Header("【檢查點系統 (Checkpoints)】")]
+    [Header("【Checkpoints System】")]
     public CheckpointRing[] rings;
     public int passedCheckpoints = 0;
-    public int totalCheckpoints = 7;
+
+    private int _totalCheckpoints = 0;
+    public int totalCheckpoints
+    {
+        get
+        {
+            if (_totalCheckpoints <= 0)
+            {
+                RefreshCheckpointsData();
+            }
+            return _totalCheckpoints;
+        }
+        set { _totalCheckpoints = value; }
+    }
+
+    [Header("【HUD UI (TextMeshPro)】")]
+    public TextMeshProUGUI timerText;
+    public TextMeshProUGUI progressText;
+
+    [Header("【VR Clear Stage Button】")]
+    public Button nextStageButton;
+
+    private float elapsedTime = 0f;
+    private bool isGameFinished = false;
 
     void Awake()
     {
@@ -21,101 +46,190 @@ public class GameManager : MonoBehaviour
 
     void Start()
     {
-        // 延遲 0.2 秒執行，確保 CourseBuilder 已生成好樹木與檢查圈
-        Invoke(nameof(InitializeGame), 0.2f);
+        if (nextStageButton != null)
+        {
+            nextStageButton.gameObject.SetActive(false);
+        }
+
+        Invoke(nameof(InitializeGame), 0.5f);
+    }
+
+    void Update()
+    {
+        if (droneTransform == null || timerText == null || progressText == null || nextStageButton == null)
+        {
+            FindDynamicDrone();
+        }
+
+        if (!isGameFinished)
+        {
+            elapsedTime += Time.deltaTime;
+            UpdateHUDTimer();
+        }
     }
 
     private void InitializeGame()
     {
-        InitializeCheckpoints();
+        FindDynamicDrone();
+        RefreshCheckpointsData();
         FixTreeColliders();
+        UpdateHUDProgress();
     }
 
-    /// <summary>
-    /// 自動抓取並初始化場景中所有的 CheckpointRing
-    /// </summary>
-    public void InitializeCheckpoints()
+    public void RefreshCheckpointsData()
     {
-        rings = FindObjectsByType<CheckpointRing>(FindObjectsSortMode.None)
-                .OrderBy(r => r.checkpointIndex)
-                .ToArray();
+        CheckpointRing[] foundRings = FindObjectsByType<CheckpointRing>(FindObjectsSortMode.None);
 
-        totalCheckpoints = rings.Length;
-        passedCheckpoints = 0;
-
-        if (rings != null && rings.Length > 0)
+        if (foundRings != null && foundRings.Length > 0)
         {
-            rings[0].MarkActive();
-            Debug.Log($"[GameManager] 檢查點系統已初始化！共 {totalCheckpoints} 個。");
+            rings = foundRings.OrderBy(r => r.checkpointIndex).ToArray();
+            _totalCheckpoints = rings.Length;
+        }
+        else
+        {
+            CourseBuilder builder = FindFirstObjectByType<CourseBuilder>();
+            if (builder != null)
+            {
+                _totalCheckpoints = builder.checkpointCount;
+            }
         }
     }
 
-    /// <summary>
-    /// 【核心修復】：自動校正所有樹冠碰撞體，使其嚴格限制在綠色樹木內部
-    /// </summary>
+    private void FindDynamicDrone()
+    {
+        GameObject droneObj = GameObject.FindWithTag("Player");
+
+        if (droneObj == null)
+        {
+            DroneController1 controller = FindFirstObjectByType<DroneController1>();
+            if (controller != null) droneObj = controller.gameObject;
+        }
+
+        if (droneObj != null)
+        {
+            droneTransform = droneObj.transform;
+
+            if (timerText == null || progressText == null || nextStageButton == null)
+            {
+                TextMeshProUGUI[] uiTexts = droneObj.GetComponentsInChildren<TextMeshProUGUI>(true);
+                foreach (var t in uiTexts)
+                {
+                    if (t.name.Contains("Timer")) timerText = t;
+                    if (t.name.Contains("Progress")) progressText = t;
+                }
+
+                Button btn = droneObj.GetComponentInChildren<Button>(true);
+                if (btn != null && btn.name.Contains("NextStage"))
+                {
+                    nextStageButton = btn;
+                    nextStageButton.onClick.RemoveAllListeners();
+                    nextStageButton.onClick.AddListener(OnNextStageButtonClicked);
+                    nextStageButton.gameObject.SetActive(false);
+                }
+            }
+        }
+    }
+
+    public void CheckpointPassed(int index)
+    {
+        if (index == passedCheckpoints && !isGameFinished)
+        {
+            passedCheckpoints++;
+
+            if (_totalCheckpoints <= 0) RefreshCheckpointsData();
+
+            UpdateHUDProgress();
+
+            if (droneTransform == null) FindDynamicDrone();
+
+            Vector3 newRespawnPos = Vector3.zero;
+            if (rings != null && index >= 0 && index < rings.Length && rings[index] != null)
+            {
+                newRespawnPos = rings[index].transform.position + Vector3.up * 0.5f;
+            }
+
+            if (newRespawnPos != Vector3.zero && droneTransform != null)
+            {
+                droneTransform.SendMessage("SetRespawnPoint", newRespawnPos, SendMessageOptions.DontRequireReceiver);
+            }
+
+            if (passedCheckpoints < totalCheckpoints)
+            {
+                if (rings != null && passedCheckpoints < rings.Length)
+                {
+                    rings[passedCheckpoints].MarkActive();
+                }
+            }
+            else
+            {
+                isGameFinished = true;
+                if (progressText != null)
+                {
+                    int minutes = (int)(elapsedTime / 60f);
+                    int seconds = (int)(elapsedTime % 60f);
+                    progressText.text = $"<color=yellow>STAGE CLEAR!</color>\nTIME: {minutes:00}:{seconds:00}";
+                }
+
+                if (nextStageButton != null)
+                {
+                    nextStageButton.gameObject.SetActive(true);
+                }
+            }
+        }
+    }
+
+    public void OnNextStageButtonClicked()
+    {
+        int nextSceneIndex = SceneManager.GetActiveScene().buildIndex + 1;
+
+        if (nextSceneIndex < SceneManager.sceneCountInBuildSettings)
+        {
+            SceneManager.LoadScene(nextSceneIndex);
+        }
+        else
+        {
+            Debug.Log("[GameManager] Last scene reached. Reloading scene 0.");
+            SceneManager.LoadScene(0);
+        }
+    }
+
+    private void UpdateHUDTimer()
+    {
+        if (timerText != null)
+        {
+            int minutes = (int)(elapsedTime / 60f);
+            int seconds = (int)(elapsedTime % 60f);
+            int milliseconds = (int)((elapsedTime * 100f) % 100f);
+            timerText.text = $"TIME: {minutes:00}:{seconds:00}.{milliseconds:00}";
+        }
+    }
+
+    private void UpdateHUDProgress()
+    {
+        if (progressText != null)
+        {
+            progressText.text = $"CHECKPOINT: {passedCheckpoints} / {totalCheckpoints}";
+        }
+    }
+
     public void FixTreeColliders()
     {
         SphereCollider[] allSphereCols = FindObjectsByType<SphereCollider>(FindObjectsSortMode.None);
-        int fixedCount = 0;
-
         foreach (SphereCollider sphereCol in allSphereCols)
         {
-            // 搜尋名稱為 Sphere 且父物件包含 Tree 的樹冠
             if (sphereCol.gameObject.name.Equals("Sphere") &&
                 sphereCol.transform.parent != null &&
                 sphereCol.transform.parent.name.Contains("Tree"))
             {
                 Vector3 scale = sphereCol.transform.localScale;
-
-                float maxScaleAxis = Mathf.Max(scale.x, Mathf.Max(scale.y, scale.z)); // 15.081
-                float minHorizontalAxis = Mathf.Min(scale.x, scale.z);               // 11.5
+                float maxScaleAxis = Mathf.Max(scale.x, Mathf.Max(scale.y, scale.z));
+                float minHorizontalAxis = Mathf.Min(scale.x, scale.z);
 
                 if (maxScaleAxis > 0)
                 {
-                    // 抵銷 Unity 以最大 Y 軸計算碰撞球半徑的特性，強制縮回水平綠色邊界內 (乘 0.95 留 5% 緩衝)
                     sphereCol.radius = (minHorizontalAxis / (maxScaleAxis * 2f)) * 0.95f;
                     sphereCol.center = Vector3.zero;
-                    fixedCount++;
                 }
-            }
-        }
-
-        Debug.Log($"<color=cyan>[GameManager] 已自動修復 {fixedCount} 棵樹的碰撞體體積！</color>");
-    }
-
-    /// <summary>
-    /// 當無人機穿過 CheckpointRing 時呼叫
-    /// </summary>
-    public void CheckpointPassed(int index)
-    {
-        if (index == passedCheckpoints)
-        {
-            passedCheckpoints++;
-            Debug.Log($"<color=green>[GameManager] 通過第 {index} 個檢查點！進度: {passedCheckpoints}/{totalCheckpoints}</color>");
-
-            Vector3 newRespawnPos = rings[index].transform.position + Vector3.up * 0.5f;
-
-            // 動態傳送最新重生點給無人機
-            if (droneTransform != null)
-            {
-                droneTransform.SendMessage("SetRespawnPoint", newRespawnPos, SendMessageOptions.DontRequireReceiver);
-            }
-            else
-            {
-                GameObject droneObj = GameObject.FindWithTag("Player");
-                if (droneObj != null)
-                {
-                    droneObj.SendMessage("SetRespawnPoint", newRespawnPos, SendMessageOptions.DontRequireReceiver);
-                }
-            }
-
-            if (passedCheckpoints < rings.Length)
-            {
-                rings[passedCheckpoints].MarkActive();
-            }
-            else
-            {
-                Debug.Log("<color=yellow>【通關】恭喜！已穿過所有檢查點！</color>");
             }
         }
     }

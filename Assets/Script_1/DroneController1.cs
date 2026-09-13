@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using UnityEngine.InputSystem;
 using TMPro; // 【新增】用於支援 World Space Canvas 的 TextMeshPro 文字顯示
+using UnityEngine.SceneManagement;
 
 public class DroneController1 : MonoBehaviour
 {
@@ -69,7 +70,7 @@ public class DroneController1 : MonoBehaviour
     [SerializeField] private float engineVolume = 0.8f;
 
     [Header("【重生與翻正 (Respawn & Flip)】")]
-    [SerializeField] private Vector3 respawnPosition = new Vector3(0f, 0.5f, 0f);
+    [SerializeField] private Vector3 respawnPosition = new Vector3(0f, 1.5f, 0f);
     private bool isFlipping = false;
 
     // --- 防吸附/防貼牆機制變數 ---
@@ -481,13 +482,37 @@ public class DroneController1 : MonoBehaviour
 
     private void Respawn()
     {
+        // 🌟 方式 A：最乾淨、最徹底的重置方法 —— 直接重新載入當前場景
+        // 這會讓 CourseBuilder 重新執行 Start()，重新隨機生成整條賽道與樹木，並將無人機擺回最乾淨的初始狀態！
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+
+        /* 
+        // 🌟 方式 B：若你不希望重新載入場景，而是只搬回起點 (0, 1.5, 0)：
         isArmed = false;
         currentFlightMode = FlightMode.Stabilized;
-        transform.position = respawnPosition;
+
+        rb.isKinematic = true;
+
+        // 強制指定起點平台的上方 (0, 1.5, 0)
+        transform.position = new Vector3(0f, 1.5f, 0f);
         transform.rotation = Quaternion.identity;
+
+        if (xrOriginTransform != null)
+        {
+            xrOriginTransform.localPosition = Vector3.zero;
+            xrOriginTransform.localRotation = Quaternion.identity;
+        }
+
         rb.linearVelocity = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
+        rb.isKinematic = false;
+
         targetYawAngle = 0f;
+        isTouchingWall = false;
+        isGrounded = false;
+
+        Physics.SyncTransforms();
+        */
     }
 
     private void CheckAutoFlip()

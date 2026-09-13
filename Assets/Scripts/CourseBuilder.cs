@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using System.Collections.Generic;
 
+// 賽道生成器，負責在場景中動態生成起點、終點、檢查圈與樹木，並確保樹木不會阻擋賽道上的關鍵點。
 public class CourseBuilder : MonoBehaviour
 {
     public GameObject drone;
@@ -133,7 +134,7 @@ public class CourseBuilder : MonoBehaviour
             seg.transform.localScale = new Vector3(0.4f, 0.6f, 0.4f);
             seg.transform.LookAt(ringParent.transform.position);
             seg.transform.Rotate(90f, 0f, 0f);
-            seg.GetComponent<Renderer>().material.color = new Color(1f, 0.6f, 0f);
+            seg.GetComponent<Renderer>().material.color = new Color(1f, 0.6f, 0f); // 預設橘色
             Destroy(seg.GetComponent<Collider>());
         }
 
@@ -141,8 +142,9 @@ public class CourseBuilder : MonoBehaviour
         col.isTrigger = true;
         col.radius = radius * 0.85f;
 
-        CheckpointRing cp = ringParent.AddComponent<CheckpointRing>();
-        cp.checkpointIndex = index;
+        // 掛載動態判定組件並綁定編號
+        RingTrigger trigger = ringParent.AddComponent<RingTrigger>();
+        trigger.checkpointIndex = index;
     }
 
     void CreateTree(Vector3 pos)
@@ -171,5 +173,61 @@ public class CourseBuilder : MonoBehaviour
             Random.Range(0.4f, 0.7f),
             Random.Range(0.1f, 0.2f)
         );
+    }
+}
+
+// 檢查點碰撞觸發邏輯，直接包含於同檔案內
+public class RingTrigger : MonoBehaviour
+{
+    public int checkpointIndex;
+    private bool isPassed = false;
+
+    private void Start()
+    {
+        // 0 號目標圈開局自動設為黃色提示
+        if (checkpointIndex == 0)
+        {
+            SetColor(Color.yellow);
+        }
+    }
+
+    private void OnTriggerEnter(Collider other)
+    {
+        if (isPassed) return;
+
+        // 判斷是否為無人機
+        if (other.GetComponentInParent<DroneController1>() != null || other.CompareTag("Player"))
+        {
+            // 向 GameManager 驗證當前穿越順序
+            if (GameManager.Instance != null && checkpointIndex == GameManager.Instance.passedCheckpoints)
+            {
+                isPassed = true;
+
+                // 1. 本身順序正確，變綠色
+                SetColor(Color.green);
+
+                // 2. 通知 GameManager 更新進度與最新重生點
+                GameManager.Instance.CheckpointPassed(checkpointIndex);
+
+                // 3. 搜尋並將下一個目標檢查點改為黃色高亮
+                RingTrigger[] allTriggers = FindObjectsByType<RingTrigger>(FindObjectsSortMode.None);
+                foreach (RingTrigger trigger in allTriggers)
+                {
+                    if (trigger.checkpointIndex == checkpointIndex + 1)
+                    {
+                        trigger.SetColor(Color.yellow);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    public void SetColor(Color newColor)
+    {
+        foreach (Renderer r in GetComponentsInChildren<Renderer>())
+        {
+            if (r != null) r.material.color = newColor;
+        }
     }
 }
