@@ -3,16 +3,20 @@ using System.Linq;
 using TMPro;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
+using UnityEngine.XR.Interaction.Toolkit.UI;
 
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance;
 
     [Header("【Drone Reference】")]
+    [Tooltip("無人機根物件 Transform")]
     public Transform droneTransform;
 
     [Header("【Checkpoints System】")]
+    [Tooltip("場景中所有的檢查點環節")]
     public CheckpointRing[] rings;
+    [Tooltip("目前已通過的檢查點數量")]
     public int passedCheckpoints = 0;
 
     private int _totalCheckpoints = 0;
@@ -30,11 +34,36 @@ public class GameManager : MonoBehaviour
     }
 
     [Header("【HUD UI (TextMeshPro)】")]
+    [Tooltip("顯示比賽時間的 TMP 文字組件")]
     public TextMeshProUGUI timerText;
+    [Tooltip("顯示檢查點進度的 TMP 文字組件")]
     public TextMeshProUGUI progressText;
 
     [Header("【VR Clear Stage Button】")]
+    [Tooltip("通關時顯示的下關按鈕")]
     public Button nextStageButton;
+
+    [Header("【VR HUD 3D 空間跟隨與 Inspector 調校】")]
+    [Tooltip("HUD 懸浮在鏡頭正前方的 3D 距離（米）")]
+    [Range(0.2f, 3.0f)]
+    public float hudDistance = 0.5f;
+
+    [Tooltip("HUD 3D 空間相對位移 (X: 左右, Y: 上下, Z: 前後微調)")]
+    public Vector3 hudOffset = new Vector3(0f, -0.08f, 0f);
+
+    [Tooltip("HUD Canvas 的整體 3D 縮放大小")]
+    public Vector3 hudScale = new Vector3(0.0008f, 0.0008f, 0.0008f);
+
+    [Tooltip("HUD 旋轉與移動的跟隨速度（已換成直接跟隨，此變數暫不影響）")]
+    public float followSpeed = 25f;
+
+    [Header("【滾輪動態微調設定】")]
+    [Tooltip("使用滑鼠滾輪調整 HUD 上下位置的靈敏度")]
+    public float scrollSensitivity = 0.05f;
+
+    // 參照變數
+    private Canvas hudCanvas;
+    private Camera currentActiveCam;
 
     private float elapsedTime = 0f;
     private bool isGameFinished = false;
@@ -61,11 +90,39 @@ public class GameManager : MonoBehaviour
             FindDynamicDrone();
         }
 
+        // 按下 C 鍵切換無人機視角時，重新獲取當前啟用的攝影機
+        if (Input.GetKeyDown(KeyCode.C))
+        {
+            Invoke(nameof(UpdateHUDCanvasCamera), 0.05f);
+        }
+
+        // 監聽滑鼠滾輪：動態調整 HUD 上下位置 (Y 軸位移)
+        float scrollInput = Input.GetAxis("Mouse ScrollWheel");
+        if (Mathf.Abs(scrollInput) > 0.01f)
+        {
+            hudOffset.y += scrollInput * scrollSensitivity;
+        }
+
+        // 即時套用 Scale
+        if (hudCanvas != null)
+        {
+            hudCanvas.transform.localScale = hudScale;
+        }
+
         if (!isGameFinished)
         {
             elapsedTime += Time.deltaTime;
             UpdateHUDTimer();
         }
+    }
+
+    /// <summary>
+    /// 在 LateUpdate 處理位置跟隨
+    /// 確保無人機與攝影機運算完畢後才移動 UI
+    /// </summary>
+    void LateUpdate()
+    {
+        SmoothFollowVRCamera();
     }
 
     private void InitializeGame()
@@ -74,6 +131,64 @@ public class GameManager : MonoBehaviour
         RefreshCheckpointsData();
         FixTreeColliders();
         UpdateHUDProgress();
+        UpdateHUDCanvasCamera();
+    }
+
+    /// <summary>
+    /// 當切換鏡頭（C 鍵）或無人機生成時，更新 HUD Canvas 對應的當前啟用 Camera
+    /// </summary>
+    public void UpdateHUDCanvasCamera()
+    {
+        if (droneTransform == null) return;
+
+        currentActiveCam = Camera.main;
+        if (currentActiveCam == null || !currentActiveCam.gameObject.activeInHierarchy)
+        {
+            Camera[] allCams = droneTransform.GetComponentsInChildren<Camera>(false);
+            if (allCams.Length > 0) currentActiveCam = allCams[0];
+            else currentActiveCam = Camera.current;
+        }
+
+        if (hudCanvas == null && timerText != null)
+        {
+            hudCanvas = timerText.GetComponentInParent<Canvas>();
+        }
+
+        if (hudCanvas != null && currentActiveCam != null)
+        {
+            hudCanvas.renderMode = RenderMode.WorldSpace;
+            hudCanvas.transform.SetParent(null); // 解除父級綁定，保持世界空間自由度
+            hudCanvas.transform.localScale = hudScale;
+            hudCanvas.worldCamera = currentActiveCam;
+        }
+    }
+
+    /// <summary>
+    /// VR 即時跟隨：改為直接賦值，100% 緊貼攝影機
+    /// </summary>
+    private void SmoothFollowVRCamera()
+    {
+        if (hudCanvas == null || currentActiveCam == null) return;
+
+        // 計算目標位置
+        Vector3 targetPosition = currentActiveCam.transform.position
+                               + (currentActiveCam.transform.forward * hudDistance)
+                               + (currentActiveCam.transform.right * hudOffset.x)
+                               + (currentActiveCam.transform.up * hudOffset.y)
+                               + (currentActiveCam.transform.forward * hudOffset.z);
+
+        // 面向攝影機的目標旋轉
+        Quaternion targetRotation = Quaternion.LookRotation(hudCanvas.transform.position - currentActiveCam.transform.position);
+
+        /* 
+        // 舊有插值平滑跟隨（已註解）
+        hudCanvas.transform.position = Vector3.Lerp(hudCanvas.transform.position, targetPosition, Time.deltaTime * followSpeed);
+        hudCanvas.transform.rotation = Quaternion.Slerp(hudCanvas.transform.rotation, targetRotation, Time.deltaTime * followSpeed);
+        */
+
+        // 🌟 改為立刻跟隨（無插值延遲）
+        hudCanvas.transform.position = targetPosition;
+        hudCanvas.transform.rotation = targetRotation;
     }
 
     public void RefreshCheckpointsData()
@@ -127,6 +242,13 @@ public class GameManager : MonoBehaviour
                     nextStageButton.gameObject.SetActive(false);
                 }
             }
+
+            if (hudCanvas == null && timerText != null)
+            {
+                hudCanvas = timerText.GetComponentInParent<Canvas>();
+            }
+
+            UpdateHUDCanvasCamera();
         }
     }
 

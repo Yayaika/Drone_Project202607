@@ -237,7 +237,9 @@ MonoBehaviour:
   droneTransform: {fileID: 0}
   rings: []
   passedCheckpoints: 0
-  totalCheckpoints: 7
+  timerText: {fileID: 0}
+  progressText: {fileID: 0}
+  nextStageButton: {fileID: 0}
 --- !u!4 &581404757
 Transform:
   m_ObjectHideFlags: 0
@@ -737,7 +739,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   drone: {fileID: 0}
-  checkpointCount: 7
+  checkpointCount: 6
   courseLength: 200
   treeCount: 100
   safetyRadius: 12
