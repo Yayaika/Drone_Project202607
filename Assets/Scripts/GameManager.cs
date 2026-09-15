@@ -252,7 +252,7 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    public void CheckpointPassed(int index)
+    /*public void CheckpointPassed(int index)
     {
         if (index == passedCheckpoints && !isGameFinished)
         {
@@ -274,6 +274,46 @@ public class GameManager : MonoBehaviour
             {
                 droneTransform.SendMessage("SetRespawnPoint", newRespawnPos, SendMessageOptions.DontRequireReceiver);
             }
+
+            if (passedCheckpoints < totalCheckpoints)
+            {
+                if (rings != null && passedCheckpoints < rings.Length)
+                {
+                    rings[passedCheckpoints].MarkActive();
+                }
+            }
+            else
+            {
+                isGameFinished = true;
+                if (progressText != null)
+                {
+                    int minutes = (int)(elapsedTime / 60f);
+                    int seconds = (int)(elapsedTime % 60f);
+                    progressText.text = $"<color=yellow>STAGE CLEAR!</color>\nTIME: {minutes:00}:{seconds:00}";
+                }
+
+                if (nextStageButton != null)
+                {
+                    nextStageButton.gameObject.SetActive(true);
+                }
+            }
+        }
+    }*/
+
+    public void CheckpointPassed(int index)
+    {
+        if (index == passedCheckpoints && !isGameFinished)
+        {
+            passedCheckpoints++;
+
+            if (_totalCheckpoints <= 0) RefreshCheckpointsData();
+
+            UpdateHUDProgress();
+
+            if (droneTransform == null) FindDynamicDrone();
+
+            // ！！已經刪除舊版強制設定重生點 (SetRespawnPoint) 的程式碼！！
+            // 讓重生座標的控制權 100% 交給 RaceManager 處理
 
             if (passedCheckpoints < totalCheckpoints)
             {
