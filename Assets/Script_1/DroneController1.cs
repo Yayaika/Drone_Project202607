@@ -39,6 +39,8 @@ public class DroneController1 : MonoBehaviour
     [SerializeField] private float propHoverRPM = 2800f;
     [SerializeField] private float propMaxRPM = 3500f;
     private float currentVisualRpm = 0f;
+    // 新增：當玩家按下重生鍵時，對外廣播的事件
+    public event System.Action OnRespawnPressed;
 
     public bool IsEngineStarted => isArmed;
     public float CurrentRPM => currentVisualRpm;
@@ -484,7 +486,15 @@ public class DroneController1 : MonoBehaviour
     {
         // 🌟 方式 A：最乾淨、最徹底的重置方法 —— 直接重新載入當前場景
         // 這會讓 CourseBuilder 重新執行 Start()，重新隨機生成整條賽道與樹木，並將無人機擺回最乾淨的初始狀態！
-        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        //SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+
+        isArmed = true;
+        currentFlightMode = FlightMode.Stabilized;
+        transform.position = respawnPosition;
+        transform.rotation = Quaternion.identity;
+        rb.linearVelocity = Vector3.zero;
+        rb.angularVelocity = Vector3.zero;
+        targetYawAngle = 0f;
 
         /* 
         // 🌟 方式 B：若你不希望重新載入場景，而是只搬回起點 (0, 1.5, 0)：
@@ -575,5 +585,33 @@ public class DroneController1 : MonoBehaviour
         if (headingText != null) headingText.text = $"Heading:   {yaw:F0}°";
         if (positionText != null) positionText.text = $"Position:  X:{pos.x:F1}  Z:{pos.z:F1}";
         if (speedText != null) speedText.text = $"Speed:     {currentSpeed:F1} m/s";
+    }
+    // 新增給 RaceManager 呼叫的專用重生函式
+    public void RespawnAtCheckpoint(Vector3 newPos, Quaternion newRot)
+    {
+        isArmed = true; 
+        currentFlightMode = FlightMode.Stabilized;
+        
+        // ！！關鍵修復：只保留 Y 軸方向 (Yaw)，強制讓機身水平 (X=0, Z=0)
+        float flatYaw = newRot.eulerAngles.y+180f;
+        Quaternion flatRotation = Quaternion.Euler(0, flatYaw, 0);
+        
+        // 對 Rigidbody 傳送，套用過濾後的水平旋轉
+        rb.position = newPos;
+        rb.rotation = flatRotation;
+        transform.position = newPos;
+        transform.rotation = flatRotation;
+        
+        // 清除殘留的物理速度
+        rb.linearVelocity = Vector3.zero;
+        rb.angularVelocity = Vector3.zero;
+        
+        // 重置內部輸入數值
+        stickPitch = 0f;
+        stickRoll = 0f;
+        stickYaw = 0f;
+        
+        // 對齊物理目標方向
+        targetYawAngle = flatYaw; 
     }
 }
