@@ -37,6 +37,7 @@ public class RaceManager : MonoBehaviour
     private Quaternion lastCheckpointRotation;
     private DroneController1 droneCtrl;
     private float lastTriggerTime = 0f; // 用來防止同一個 Checkpoint 被連續觸發多次
+    private bool hasInitializedDrone = false;
 
     void Awake()
     {
@@ -49,7 +50,12 @@ public class RaceManager : MonoBehaviour
 
             raceSpline = spawnedSpline;
             trackStartPoint = spawnedStart;
-
+            GameObject spawnerObj = GameObject.Find("Spawner");
+            if (spawnerObj != null && trackStartPoint != null)
+            {
+                spawnerObj.transform.position = trackStartPoint.position;
+                spawnerObj.transform.rotation = trackStartPoint.rotation;
+            }
             // 🌟 新增：把檢查點圓圈也動態生出來！
             if (gatePrefab != null)
             {
@@ -102,10 +108,39 @@ public class RaceManager : MonoBehaviour
 
     void Update()
     {
-        if (isRacing)
+        if (!hasInitializedDrone || droneTransform == null)
         {
-            raceTimer += Time.deltaTime;
-            UpdateTimerUI(); 
+            FindDynamicDroneAndInitialize();
+        }
+    }
+
+    private void FindDynamicDroneAndInitialize()
+    {
+        GameObject droneObj = GameObject.FindWithTag("Player");
+
+        if (droneObj == null)
+        {
+            DroneController1 controller = FindFirstObjectByType<DroneController1>();
+            if (controller != null) droneObj = controller.gameObject;
+        }
+
+        if (droneObj != null)
+        {
+            droneTransform = droneObj.transform;
+            droneCtrl = droneTransform.GetComponent<DroneController1>();
+            
+            if (trackStartPoint != null)
+            {
+                lastCheckpointPosition = trackStartPoint.position;
+                lastCheckpointRotation = trackStartPoint.rotation;
+                
+                // 👇 🌟 雙重保險：抓到無人機的瞬間，強制將它設定在起點
+                if (droneCtrl != null)
+                {
+                    droneCtrl.RespawnAtCheckpoint(lastCheckpointPosition, lastCheckpointRotation);
+                }
+                hasInitializedDrone = true;
+            }
         }
     }
 
@@ -116,7 +151,7 @@ public class RaceManager : MonoBehaviour
         lastTriggerTime = Time.time;
 
         // 🌟 3. 關鍵修復：必須記錄「無人機」的安全殘影，絕對不要記錄圓圈，以免受城市群組座標干擾！
-        if (droneTransform != null && raceSpline != null)
+        /*if (droneTransform != null && raceSpline != null)
         {
             lastCheckpointPosition = droneTransform.position; // 位置依然用無人機的安全位置
             
@@ -135,6 +170,11 @@ public class RaceManager : MonoBehaviour
             Vector3 worldUp = raceSpline.transform.TransformDirection(localUp);
             
             lastCheckpointRotation = Quaternion.LookRotation(worldTangent, worldUp);
+        }*/
+        if (gateInstance != null)
+        {
+            lastCheckpointPosition = gateInstance.transform.position; 
+            lastCheckpointRotation = gateInstance.transform.rotation;
         }
         currentIndex++;
 

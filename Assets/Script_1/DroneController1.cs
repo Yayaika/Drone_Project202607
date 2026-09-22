@@ -488,13 +488,21 @@ public class DroneController1 : MonoBehaviour
         // 這會讓 CourseBuilder 重新執行 Start()，重新隨機生成整條賽道與樹木，並將無人機擺回最乾淨的初始狀態！
         //SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
 
-        isArmed = true;
-        currentFlightMode = FlightMode.Stabilized;
-        transform.position = respawnPosition;
-        transform.rotation = Quaternion.identity;
-        rb.linearVelocity = Vector3.zero;
-        rb.angularVelocity = Vector3.zero;
-        targetYawAngle = 0f;
+        if (OnRespawnPressed != null)
+        {
+            OnRespawnPressed.Invoke();
+        }
+        else
+        {
+            // 如果沒有 RaceManager 監聽（例如你在沒賽道的測試場景），才退回備用位置
+            isArmed = true;
+            currentFlightMode = FlightMode.Stabilized;
+            transform.position = respawnPosition;
+            transform.rotation = Quaternion.identity;
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            targetYawAngle = 0f;
+        }
 
         /* 
         // 🌟 方式 B：若你不希望重新載入場景，而是只搬回起點 (0, 1.5, 0)：
@@ -601,6 +609,7 @@ public class DroneController1 : MonoBehaviour
         rb.rotation = flatRotation;
         transform.position = newPos;
         transform.rotation = flatRotation;
+        Physics.SyncTransforms();
         
         // 清除殘留的物理速度
         rb.linearVelocity = Vector3.zero;
