@@ -129,6 +129,12 @@ public class RaceManager : MonoBehaviour
             droneTransform = droneObj.transform;
             droneCtrl = droneTransform.GetComponent<DroneController1>();
             
+            if (droneCtrl != null)
+            {
+                droneCtrl.OnRespawnPressed -= RespawnDrone; // 避免重複訂閱
+                droneCtrl.OnRespawnPressed += RespawnDrone; // 正式綁定 R 鍵重置事件
+            }
+            
             if (trackStartPoint != null)
             {
                 lastCheckpointPosition = trackStartPoint.position;
@@ -208,17 +214,6 @@ public class RaceManager : MonoBehaviour
         // 🌟 4. 關鍵修復：必須使用 localPosition 才能讓圓圈精準對齊賽道，不會飛到地圖外！
         gateInstance.transform.localPosition = localPos;
         gateInstance.transform.localRotation = Quaternion.LookRotation(localTangent, localUp);
-    }
-
-    void UpdateTimerUI()
-    {
-        if (timerText != null)
-        {
-            int minutes = Mathf.FloorToInt(raceTimer / 60f);
-            int seconds = Mathf.FloorToInt(raceTimer % 60f);
-            int milliseconds = Mathf.FloorToInt((raceTimer * 1000f) % 1000f);
-            timerText.text = string.Format("{0:00}:{1:00}.{2:000}", minutes, seconds, milliseconds);
-        }
     }
 
     // === 重生邏輯 ===

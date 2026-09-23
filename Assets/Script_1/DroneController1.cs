@@ -72,7 +72,9 @@ public class DroneController1 : MonoBehaviour
     [SerializeField] private float engineVolume = 0.8f;
 
     [Header("【重生與翻正 (Respawn & Flip)】")]
-    [SerializeField] private Vector3 respawnPosition = new Vector3(0f, 1.5f, 0f);
+    //[SerializeField] private Vector3 respawnPosition = new Vector3(0f, 1.5f, 0f);
+    private Vector3 initialPosition;
+    private Quaternion initialRotation;
     private bool isFlipping = false;
 
     // --- 防吸附/防貼牆機制變數 ---
@@ -96,6 +98,7 @@ public class DroneController1 : MonoBehaviour
     private float armTimer = 0f;
     private float disarmTimer = 0f;
     private bool wasGroundedLastFrame = true;
+    public bool canControl = true;
 
     private void Awake()
     {
@@ -179,6 +182,10 @@ public class DroneController1 : MonoBehaviour
         FindPropellers();
         InitializeCameras();
 
+        // 在 Start() 最下面加入這兩行，記錄剛出生時的真實座標
+        initialPosition = transform.position;
+        initialRotation = transform.rotation;
+
         targetYawAngle = transform.eulerAngles.y;
         lastPos = transform.position;
     }
@@ -205,6 +212,15 @@ public class DroneController1 : MonoBehaviour
     private void Update()
     {
         if (isFlipping) return;
+
+        if (!canControl)
+        {
+            stickThrottle = 0f;
+            stickYaw = 0f;
+            stickPitch = 0f;
+            stickRoll = 0f;
+            return; 
+        }
 
         stickThrottle = throttleAction.ReadValue<float>();
         stickYaw = yawAction.ReadValue<float>();
@@ -495,13 +511,7 @@ public class DroneController1 : MonoBehaviour
         else
         {
             // 如果沒有 RaceManager 監聽（例如你在沒賽道的測試場景），才退回備用位置
-            isArmed = true;
-            currentFlightMode = FlightMode.Stabilized;
-            transform.position = respawnPosition;
-            transform.rotation = Quaternion.identity;
-            rb.linearVelocity = Vector3.zero;
-            rb.angularVelocity = Vector3.zero;
-            targetYawAngle = 0f;
+            RespawnAtCheckpoint(initialPosition, initialRotation);
         }
 
         /* 

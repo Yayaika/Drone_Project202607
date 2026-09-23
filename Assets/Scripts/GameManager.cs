@@ -4,6 +4,7 @@ using TMPro;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using UnityEngine.XR.Interaction.Toolkit.UI;
+using System.Collections;
 
 public class GameManager : MonoBehaviour
 {
@@ -61,6 +62,10 @@ public class GameManager : MonoBehaviour
     [Tooltip("使用滑鼠滾輪調整 HUD 上下位置的靈敏度")]
     public float scrollSensitivity = 0.05f;
 
+    [Header("【比賽流程控制】")]
+    public TextMeshProUGUI centerDisplayText; // 拖入畫面正中央的大字體 UI
+    public bool hasRaceStarted = false;
+
     // 參照變數
     private Canvas hudCanvas;
     private Camera currentActiveCam;
@@ -109,7 +114,12 @@ public class GameManager : MonoBehaviour
             hudCanvas.transform.localScale = hudScale;
         }
 
-        if (!isGameFinished)
+        /*if (!isGameFinished)
+        {
+            elapsedTime += Time.deltaTime;
+            UpdateHUDTimer();
+        }*/
+        if (hasRaceStarted && !isGameFinished)
         {
             elapsedTime += Time.deltaTime;
             UpdateHUDTimer();
@@ -132,6 +142,7 @@ public class GameManager : MonoBehaviour
         FixTreeColliders();
         UpdateHUDProgress();
         UpdateHUDCanvasCamera();
+        StartCoroutine(RaceCountdownRoutine());
     }
 
     /// <summary>
@@ -306,7 +317,7 @@ public class GameManager : MonoBehaviour
         {
             passedCheckpoints++;
 
-            if (_totalCheckpoints <= 0) RefreshCheckpointsData();
+            //if (_totalCheckpoints <= 0) RefreshCheckpointsData();
 
             UpdateHUDProgress();
 
@@ -315,14 +326,23 @@ public class GameManager : MonoBehaviour
             // ！！已經刪除舊版強制設定重生點 (SetRespawnPoint) 的程式碼！！
             // 讓重生座標的控制權 100% 交給 RaceManager 處理
 
-            if (passedCheckpoints < totalCheckpoints)
+            /*if (passedCheckpoints < totalCheckpoints)
             {
                 if (rings != null && passedCheckpoints < rings.Length)
                 {
                     rings[passedCheckpoints].MarkActive();
                 }
+            }*/
+            bool isFinalRing = (rings != null && index == rings.Length - 1);
+            if (!isFinalRing)
+            {
+                // 如果不是最後一個，就繼續把下一個圓圈亮起來
+                if (rings != null && passedCheckpoints < rings.Length)
+                {
+                    rings[passedCheckpoints].MarkActive();
+                }
             }
-            else
+            /*else
             {
                 isGameFinished = true;
                 if (progressText != null)
@@ -336,6 +356,29 @@ public class GameManager : MonoBehaviour
                 {
                     nextStageButton.gameObject.SetActive(true);
                 }
+            }*/
+            else
+            {
+                isGameFinished = true;
+                if (progressText != null) progressText.text = $"<color=yellow>STAGE CLEAR!</color>";
+
+                // 👇 新增結算畫面與鎖定無人機
+                if (centerDisplayText != null)
+                {
+                    centerDisplayText.gameObject.SetActive(true);
+                    int minutes = (int)(elapsedTime / 60f);
+                    int seconds = (int)(elapsedTime % 60f);
+                    int milliseconds = (int)((elapsedTime * 100f) % 100f);
+                    centerDisplayText.text = $"<color=yellow>FINISH!</color>\n<size=50>TIME: {minutes:00}:{seconds:00}.{milliseconds:00}</size>";
+                }
+
+                if (droneTransform != null)
+                {
+                    DroneController1 drone = droneTransform.GetComponent<DroneController1>();
+                    if (drone != null) drone.canControl = false; // 抵達終點鎖定控制
+                }
+                
+                if (nextStageButton != null) nextStageButton.gameObject.SetActive(true);
             }
         }
     }
@@ -394,5 +437,34 @@ public class GameManager : MonoBehaviour
                 }
             }
         }
+    }
+    private IEnumerator RaceCountdownRoutine()
+    {
+        yield return new WaitUntil(() => droneTransform != null);
+        DroneController1 drone = droneTransform.GetComponent<DroneController1>();
+        
+        if (drone != null) drone.canControl = false; // 鎖定操作
+
+        if (centerDisplayText != null)
+        {
+            centerDisplayText.gameObject.SetActive(true);
+            centerDisplayText.text = "<color=red>3</color>";
+            yield return new WaitForSeconds(1f);
+            centerDisplayText.text = "<color=orange>2</color>";
+            yield return new WaitForSeconds(1f);
+            centerDisplayText.text = "<color=yellow>1</color>";
+            yield return new WaitForSeconds(1f);
+            centerDisplayText.text = "<color=green>GO!</color>";
+        }
+
+        hasRaceStarted = true; // 正式開始計時
+        if (drone != null)
+        {
+            drone.canControl = true; // 解鎖操作
+            drone.isArmed = true;    // 發動引擎
+        }
+
+        yield return new WaitForSeconds(1f);
+        if (centerDisplayText != null) centerDisplayText.text = "";
     }
 }
