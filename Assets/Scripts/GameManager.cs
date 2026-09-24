@@ -1,59 +1,39 @@
 ﻿using UnityEngine;
-using System.Linq;
 using TMPro;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
-using System.Collections;
 
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance;
 
-    [Header("【Drone Reference】")]
-    [Tooltip("無人機根物件 Transform")]
-    public Transform droneTransform;
-
-    [Header("【Checkpoints System】")]
-    [Tooltip("場景中所有的檢查點環節")]
-    public CheckpointRing[] rings;
-    [Tooltip("目前已通過的檢查點數量")]
-    public int passedCheckpoints = 0;
-
-    private int _totalCheckpoints = 0;
-    public int totalCheckpoints
+    // 🌟 透過 Property 監聽，當 SpawnCtrl 填入 droneTransform 時立刻觸發 UI 綁定
+    private Transform _droneTransform;
+    public Transform droneTransform
     {
-        get
+        get => _droneTransform;
+        set
         {
-            if (_totalCheckpoints <= 0)
-            {
-                RefreshCheckpointsData();
-            }
-            return _totalCheckpoints;
+            _droneTransform = value;
+            FindAndBindDroneUI(); // 立刻綁定動態生成的無人機 UI
         }
-        set { _totalCheckpoints = value; }
     }
 
-    [Header("【HUD UI (TextMeshPro)】")]
-    [Tooltip("顯示比賽時間的 TMP 文字組件")]
-    public TextMeshProUGUI timerText;
-    [Tooltip("顯示檢查點進度的 TMP 文字組件")]
-    public TextMeshProUGUI progressText;
+    [Header("【 關卡與場景設定 】")]
+    public string nextSceneName = "City2";   // 要切換的下一個關卡場景名稱
+    public int totalCheckpoints = 6;         // 總檢查點數量
+    public int passedCheckpoints = 0;
 
-    [Header("【VR Clear Stage Button】")]
-    [Tooltip("通關時顯示的下關按鈕")]
-    public Button nextStageButton;
-
-    [Header("【比賽流程控制】")]
-    [Tooltip("拖入畫面正中央的大字體 UI (倒數/結算)")]
-    public TextMeshProUGUI centerDisplayText;
-    public bool hasRaceStarted = false;
-
-    // 參照變數
-    private Canvas hudCanvas;
-    private Camera currentActiveCam;
+    [Header("【 UI 組件 】")]
+    public TextMeshProUGUI timerText;          // TimerText
+    public TextMeshProUGUI progressText;       // ProgressText
+    public TextMeshProUGUI centerDisplayText;  // [Text]Finish
+    public Button nextStageButton;             // [Button]NextStage
+    public Slider progressSlider;              // [Slider]進度
 
     private float elapsedTime = 0f;
     private bool isGameFinished = false;
+    private bool isTimerRunning = true;
 
     void Awake()
     {
@@ -62,269 +42,160 @@ public class GameManager : MonoBehaviour
 
     void Start()
     {
-        if (nextStageButton != null)
-        {
-            nextStageButton.gameObject.SetActive(false);
-        }
-
-        Invoke(nameof(InitializeGame), 0.5f);
+        FindAndBindDroneUI();
     }
 
     void Update()
     {
-        if (droneTransform == null || timerText == null || progressText == null || nextStageButton == null)
-        {
-            FindDynamicDrone();
-        }
-
-        // 按下 C 鍵切換無人機視角時，重新獲取當前啟用的攝影機
-        if (Input.GetKeyDown(KeyCode.C))
-        {
-            Invoke(nameof(UpdateHUDCanvasCamera), 0.05f);
-        }
-
-        // 僅在比賽正式開始且未結束時累積時間並更新 UI
-        if (hasRaceStarted && !isGameFinished)
+        // 🌟 計時器每幀更新
+        if (isTimerRunning && !isGameFinished)
         {
             elapsedTime += Time.deltaTime;
-            UpdateHUDTimer();
+            UpdateTimerUI();
         }
     }
 
-    private void InitializeGame()
-    {
-        FindDynamicDrone();
-        RefreshCheckpointsData();
-        FixTreeColliders();
-        UpdateHUDProgress();
-        UpdateHUDCanvasCamera();
-        StartCoroutine(RaceCountdownRoutine());
-    }
-
-    /// <summary>
-    /// 更新 HUD Canvas 的渲染攝影機與模式（不干涉其 Transform / Position）
-    /// </summary>
-    public void UpdateHUDCanvasCamera()
-    {
-        if (droneTransform == null) return;
-
-        currentActiveCam = Camera.main;
-        if (currentActiveCam == null || !currentActiveCam.gameObject.activeInHierarchy)
-        {
-            Camera[] allCams = droneTransform.GetComponentsInChildren<Camera>(false);
-            if (allCams.Length > 0) currentActiveCam = allCams[0];
-            else currentActiveCam = Camera.current;
-        }
-
-        if (hudCanvas == null && timerText != null)
-        {
-            hudCanvas = timerText.GetComponentInParent<Canvas>();
-        }
-
-        if (hudCanvas != null && currentActiveCam != null)
-        {
-            hudCanvas.renderMode = RenderMode.WorldSpace;
-            hudCanvas.worldCamera = currentActiveCam;
-
-            // 【新增優化】：若 Canvas 上掛有 VRHUDFollower，立刻通知它更新 Target Camera
-            VRHUDFollower follower = hudCanvas.GetComponent<VRHUDFollower>();
-            if (follower != null)
-            {
-                follower.SetTargetCamera(currentActiveCam.transform);
-            }
-        }
-    }
-
-    public void RefreshCheckpointsData()
-    {
-        CheckpointRing[] foundRings = FindObjectsByType<CheckpointRing>(FindObjectsSortMode.None);
-
-        if (foundRings != null && foundRings.Length > 0)
-        {
-            rings = foundRings.OrderBy(r => r.checkpointIndex).ToArray();
-            _totalCheckpoints = rings.Length;
-        }
-        else
-        {
-            CourseBuilder builder = FindFirstObjectByType<CourseBuilder>();
-            if (builder != null)
-            {
-                _totalCheckpoints = builder.checkpointCount;
-            }
-        }
-    }
-
-    private void FindDynamicDrone()
-    {
-        GameObject droneObj = GameObject.FindWithTag("Player");
-
-        if (droneObj == null)
-        {
-            DroneController1 controller = FindFirstObjectByType<DroneController1>();
-            if (controller != null) droneObj = controller.gameObject;
-        }
-
-        if (droneObj != null)
-        {
-            droneTransform = droneObj.transform;
-
-            if (timerText == null || progressText == null || nextStageButton == null)
-            {
-                TextMeshProUGUI[] uiTexts = droneObj.GetComponentsInChildren<TextMeshProUGUI>(true);
-                foreach (var t in uiTexts)
-                {
-                    if (t.name.Contains("Timer")) timerText = t;
-                    if (t.name.Contains("Progress")) progressText = t;
-                }
-
-                Button btn = droneObj.GetComponentInChildren<Button>(true);
-                if (btn != null && btn.name.Contains("NextStage"))
-                {
-                    nextStageButton = btn;
-                    nextStageButton.onClick.RemoveAllListeners();
-                    nextStageButton.onClick.AddListener(OnNextStageButtonClicked);
-                    nextStageButton.gameObject.SetActive(false);
-                }
-            }
-
-            if (hudCanvas == null && timerText != null)
-            {
-                hudCanvas = timerText.GetComponentInParent<Canvas>();
-            }
-
-            UpdateHUDCanvasCamera();
-        }
-    }
-
+    // 每次通過檢查點時呼叫
     public void CheckpointPassed(int index)
     {
-        if (index == passedCheckpoints && !isGameFinished)
+        if (isGameFinished) return;
+
+        passedCheckpoints++;
+        UpdateProgressUI();
+
+        if (passedCheckpoints >= totalCheckpoints)
         {
-            passedCheckpoints++;
-
-            UpdateHUDProgress();
-
-            if (droneTransform == null) FindDynamicDrone();
-
-            bool isFinalRing = (rings != null && index == rings.Length - 1);
-            if (!isFinalRing)
-            {
-                // 若非最後一個檢查點，繼續亮起下一個環節
-                if (rings != null && passedCheckpoints < rings.Length)
-                {
-                    rings[passedCheckpoints].MarkActive();
-                }
-            }
-            else
-            {
-                // 通關結算
-                isGameFinished = true;
-                if (progressText != null) progressText.text = $"<color=yellow>STAGE CLEAR!</color>";
-
-                if (centerDisplayText != null)
-                {
-                    centerDisplayText.gameObject.SetActive(true);
-                    int minutes = (int)(elapsedTime / 60f);
-                    int seconds = (int)(elapsedTime % 60f);
-                    int milliseconds = (int)((elapsedTime * 100f) % 100f);
-                    centerDisplayText.text = $"<color=yellow>FINISH!</color>\n<size=50>TIME: {minutes:00}:{seconds:00}.{milliseconds:00}</size>";
-                }
-
-                // 鎖定無人機控制
-                if (droneTransform != null)
-                {
-                    DroneController1 drone = droneTransform.GetComponent<DroneController1>();
-                    if (drone != null) drone.canControl = false;
-                }
-
-                if (nextStageButton != null) nextStageButton.gameObject.SetActive(true);
-            }
+            TriggerWin();
         }
     }
 
-    public void OnNextStageButtonClicked()
-    {
-        int nextSceneIndex = SceneManager.GetActiveScene().buildIndex + 1;
-
-        if (nextSceneIndex < SceneManager.sceneCountInBuildSettings)
-        {
-            SceneManager.LoadScene(nextSceneIndex);
-        }
-        else
-        {
-            Debug.Log("[GameManager] Last scene reached. Reloading scene 0.");
-            SceneManager.LoadScene(0);
-        }
-    }
-
-    private void UpdateHUDTimer()
+    // 🌟 更新 TimerText 格式 (修正為 {0:00})
+    private void UpdateTimerUI()
     {
         if (timerText != null)
         {
-            int minutes = (int)(elapsedTime / 60f);
-            int seconds = (int)(elapsedTime % 60f);
-            int milliseconds = (int)((elapsedTime * 100f) % 100f);
-            timerText.text = $"TIME: {minutes:00}:{seconds:00}.{milliseconds:00}";
+            int minutes = Mathf.FloorToInt(elapsedTime / 60f);
+            int seconds = Mathf.FloorToInt(elapsedTime % 60f);
+            int fraction = Mathf.FloorToInt((elapsedTime * 100f) % 100f);
+
+            // 修正為 {0:00} 格式，時間會正常顯示為 TIME: 01:15.23
+            timerText.text = string.Format("TIME: {0:00}:{1:00}.{2:00}", minutes, seconds, fraction);
+        }
+        else
+        {
+            FindAndBindDroneUI();
         }
     }
 
-    private void UpdateHUDProgress()
+    // 更新 ProgressText 與 Slider UI
+    private void UpdateProgressUI()
     {
         if (progressText != null)
         {
             progressText.text = $"CHECKPOINT: {passedCheckpoints} / {totalCheckpoints}";
         }
-    }
 
-    public void FixTreeColliders()
-    {
-        SphereCollider[] allSphereCols = FindObjectsByType<SphereCollider>(FindObjectsSortMode.None);
-        foreach (SphereCollider sphereCol in allSphereCols)
+        if (progressSlider != null)
         {
-            if (sphereCol.gameObject.name.Equals("Sphere") &&
-                sphereCol.transform.parent != null &&
-                sphereCol.transform.parent.name.Contains("Tree"))
-            {
-                Vector3 scale = sphereCol.transform.localScale;
-                float maxScaleAxis = Mathf.Max(scale.x, Mathf.Max(scale.y, scale.z));
-                float minHorizontalAxis = Mathf.Min(scale.x, scale.z);
-
-                if (maxScaleAxis > 0)
-                {
-                    sphereCol.radius = (minHorizontalAxis / (maxScaleAxis * 2f)) * 0.95f;
-                    sphereCol.center = Vector3.zero;
-                }
-            }
+            progressSlider.maxValue = totalCheckpoints;
+            progressSlider.value = passedCheckpoints;
         }
     }
 
-    private IEnumerator RaceCountdownRoutine()
+    // 自動尋找無人機底下的所有 UI 組件
+    public void FindAndBindDroneUI()
     {
-        yield return new WaitUntil(() => droneTransform != null);
-        DroneController1 drone = droneTransform.GetComponent<DroneController1>();
+        GameObject droneObj = null;
+        if (droneTransform != null)
+        {
+            droneObj = droneTransform.gameObject;
+        }
+        else
+        {
+            droneObj = GameObject.FindWithTag("Player");
+            if (droneObj == null)
+            {
+                droneObj = GameObject.Find("Drone_Parent Variant(Clone)");
+            }
+        }
 
-        if (drone != null) drone.canControl = false; // 開局鎖定控制
+        if (droneObj != null)
+        {
+            // 搜尋所有 TextMeshProUGUI
+            TextMeshProUGUI[] uiTexts = droneObj.GetComponentsInChildren<TextMeshProUGUI>(true);
+            foreach (var t in uiTexts)
+            {
+                if (t.name.Contains("TimerText") || t.name.Contains("Timer"))
+                {
+                    timerText = t;
+                }
+                else if (t.name.Contains("ProgressText") || t.name.Contains("Progress"))
+                {
+                    progressText = t;
+                }
+                else if (t.name.Contains("Finish") || t.name.Contains("Center") || t.name.Contains("Display"))
+                {
+                    centerDisplayText = t;
+                }
+            }
+
+            // 搜尋按鈕
+            Button[] buttons = droneObj.GetComponentsInChildren<Button>(true);
+            foreach (var btn in buttons)
+            {
+                if (btn.name.Contains("NextStage") || btn.name.Contains("NextGame"))
+                {
+                    nextStageButton = btn;
+                }
+            }
+
+            // 搜尋 Slider
+            Slider[] sliders = droneObj.GetComponentsInChildren<Slider>(true);
+            if (sliders.Length > 0)
+            {
+                progressSlider = sliders[0];
+            }
+
+            // 確保 Canvas 有 GraphicRaycaster（供按鈕點擊）
+            Canvas canvas = droneObj.GetComponentInChildren<Canvas>(true);
+            if (canvas != null && canvas.GetComponent<GraphicRaycaster>() == null)
+            {
+                canvas.gameObject.AddComponent<GraphicRaycaster>();
+            }
+
+            UpdateProgressUI();
+        }
+    }
+
+    // 通關結算
+    public void TriggerWin()
+    {
+        if (isGameFinished) return;
+        isGameFinished = true;
+        isTimerRunning = false; // 停止計時
+
+        Debug.Log("【GameManager】通關！開啟 Finish! 文字與 NextStage 按鈕");
+
+        FindAndBindDroneUI();
 
         if (centerDisplayText != null)
         {
+            centerDisplayText.text = "Finish!";
             centerDisplayText.gameObject.SetActive(true);
-            centerDisplayText.text = "<color=red>3</color>";
-            yield return new WaitForSeconds(1f);
-            centerDisplayText.text = "<color=orange>2</color>";
-            yield return new WaitForSeconds(1f);
-            centerDisplayText.text = "<color=yellow>1</color>";
-            yield return new WaitForSeconds(1f);
-            centerDisplayText.text = "<color=green>GO!</color>";
         }
 
-        hasRaceStarted = true; // 正式開始計時
-        if (drone != null)
+        if (nextStageButton != null)
         {
-            drone.canControl = true; // 解鎖操控
-            drone.isArmed = true;    // 解鎖馬達
+            nextStageButton.onClick.RemoveAllListeners();
+            nextStageButton.onClick.AddListener(OnNextStageButtonClicked);
+            nextStageButton.gameObject.SetActive(true);
         }
+    }
 
-        yield return new WaitForSeconds(1f);
-        if (centerDisplayText != null) centerDisplayText.text = "";
+    // 按鈕點擊：切換場景
+    public void OnNextStageButtonClicked()
+    {
+        Debug.Log($"【GameManager】切換場景至：{nextSceneName}");
+        SceneManager.LoadScene(nextSceneName);
     }
 }

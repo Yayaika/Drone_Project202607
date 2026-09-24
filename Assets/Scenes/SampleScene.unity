@@ -234,12 +234,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 97e87135ea3d7f649bf9f5bef3e680a5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  droneTransform: {fileID: 0}
-  rings: []
+  nextSceneName: City2
+  totalCheckpoints: 6
   passedCheckpoints: 0
   timerText: {fileID: 0}
   progressText: {fileID: 0}
+  centerDisplayText: {fileID: 0}
   nextStageButton: {fileID: 0}
+  progressSlider: {fileID: 0}
 --- !u!4 &581404757
 Transform:
   m_ObjectHideFlags: 0
@@ -591,11 +593,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9713cd8f4d7db1d499be77697247062b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  target: {fileID: 0}
-  distance: 7
-  mouseSensitivity: 2
-  yMinLimit: -20
-  yMaxLimit: 80
 --- !u!114 &963194230
 MonoBehaviour:
   m_ObjectHideFlags: 0
