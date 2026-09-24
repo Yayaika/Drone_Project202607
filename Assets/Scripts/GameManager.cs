@@ -3,7 +3,6 @@ using System.Linq;
 using TMPro;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
-using UnityEngine.XR.Interaction.Toolkit.UI;
 using System.Collections;
 
 public class GameManager : MonoBehaviour
@@ -44,27 +43,11 @@ public class GameManager : MonoBehaviour
     [Tooltip("通關時顯示的下關按鈕")]
     public Button nextStageButton;
 
-    [Header("【VR HUD 3D 空間跟隨與 Inspector 調校】")]
-    [Tooltip("HUD 懸浮在鏡頭正前方的 3D 距離（米）")]
-    [Range(0.2f, 3.0f)]
-    public float hudDistance = 0.5f;
-
-    [Tooltip("HUD 3D 空間相對位移 (X: 左右, Y: 上下, Z: 前後微調)")]
-    public Vector3 hudOffset = new Vector3(0f, -0.08f, 0f);
-
-    [Tooltip("HUD Canvas 的整體 3D 縮放大小")]
-    public Vector3 hudScale = new Vector3(0.0008f, 0.0008f, 0.0008f);
-
-    [Tooltip("HUD 旋轉與移動的跟隨速度（已換成直接跟隨，此變數暫不影響）")]
-    public float followSpeed = 25f;
-
-    [Header("【滾輪動態微調設定】")]
-    [Tooltip("使用滑鼠滾輪調整 HUD 上下位置的靈敏度")]
-    public float scrollSensitivity = 0.05f;
-
     [Header("【比賽流程控制】")]
-    public TextMeshProUGUI centerDisplayText; // 拖入畫面正中央的大字體 UI
+    [Tooltip("拖入畫面正中央的大字體 UI (倒數/結算)")]
+    public TextMeshProUGUI centerDisplayText;
     public bool hasRaceStarted = false;
+
     // 參照變數
     private Canvas hudCanvas;
     private Camera currentActiveCam;
@@ -100,24 +83,8 @@ public class GameManager : MonoBehaviour
             Invoke(nameof(UpdateHUDCanvasCamera), 0.05f);
         }
 
-        // 監聽滑鼠滾輪：動態調整 HUD 上下位置 (Y 軸位移)
-        float scrollInput = Input.GetAxis("Mouse ScrollWheel");
-        if (Mathf.Abs(scrollInput) > 0.01f)
-        {
-            hudOffset.y += scrollInput * scrollSensitivity;
-        }
-
-        // 即時套用 Scale
-        if (hudCanvas != null)
-        {
-            hudCanvas.transform.localScale = hudScale;
-        }
-
+        // 僅在比賽正式開始且未結束時累積時間並更新 UI
         if (hasRaceStarted && !isGameFinished)
-        {
-            elapsedTime += Time.deltaTime;
-            UpdateHUDTimer();
-        }
         {
             elapsedTime += Time.deltaTime;
             UpdateHUDTimer();
@@ -135,7 +102,7 @@ public class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 更新 HUD Canvas 的渲染攝影機，但不干涉其 Transform / Parent 關係
+    /// 更新 HUD Canvas 的渲染攝影機與模式（不干涉其 Transform / Position）
     /// </summary>
     public void UpdateHUDCanvasCamera()
     {
@@ -157,7 +124,7 @@ public class GameManager : MonoBehaviour
         if (hudCanvas != null && currentActiveCam != null)
         {
             hudCanvas.renderMode = RenderMode.WorldSpace;
-            hudCanvas.worldCamera = currentActiveCam; // 只指派事件/渲染相機
+            hudCanvas.worldCamera = currentActiveCam;
         }
     }
 
@@ -222,106 +189,31 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    /*public void CheckpointPassed(int index)
-    {
-        if (index == passedCheckpoints && !isGameFinished)
-        {
-            passedCheckpoints++;
-
-            if (_totalCheckpoints <= 0) RefreshCheckpointsData();
-
-            UpdateHUDProgress();
-
-            if (droneTransform == null) FindDynamicDrone();
-
-            Vector3 newRespawnPos = Vector3.zero;
-            if (rings != null && index >= 0 && index < rings.Length && rings[index] != null)
-            {
-                newRespawnPos = rings[index].transform.position + Vector3.up * 0.5f;
-            }
-
-            if (newRespawnPos != Vector3.zero && droneTransform != null)
-            {
-                droneTransform.SendMessage("SetRespawnPoint", newRespawnPos, SendMessageOptions.DontRequireReceiver);
-            }
-
-            if (passedCheckpoints < totalCheckpoints)
-            {
-                if (rings != null && passedCheckpoints < rings.Length)
-                {
-                    rings[passedCheckpoints].MarkActive();
-                }
-            }
-            else
-            {
-                isGameFinished = true;
-                if (progressText != null)
-                {
-                    int minutes = (int)(elapsedTime / 60f);
-                    int seconds = (int)(elapsedTime % 60f);
-                    progressText.text = $"<color=yellow>STAGE CLEAR!</color>\nTIME: {minutes:00}:{seconds:00}";
-                }
-
-                if (nextStageButton != null)
-                {
-                    nextStageButton.gameObject.SetActive(true);
-                }
-            }
-        }
-    }*/
-
     public void CheckpointPassed(int index)
     {
         if (index == passedCheckpoints && !isGameFinished)
         {
             passedCheckpoints++;
 
-            //if (_totalCheckpoints <= 0) RefreshCheckpointsData();
-
             UpdateHUDProgress();
 
             if (droneTransform == null) FindDynamicDrone();
 
-            // ！！已經刪除舊版強制設定重生點 (SetRespawnPoint) 的程式碼！！
-            // 讓重生座標的控制權 100% 交給 RaceManager 處理
-
-            /*if (passedCheckpoints < totalCheckpoints)
-            {
-                if (rings != null && passedCheckpoints < rings.Length)
-                {
-                    rings[passedCheckpoints].MarkActive();
-                }
-            }*/
             bool isFinalRing = (rings != null && index == rings.Length - 1);
             if (!isFinalRing)
             {
-                // 如果不是最後一個，就繼續把下一個圓圈亮起來
+                // 若非最後一個檢查點，繼續亮起下一個環節
                 if (rings != null && passedCheckpoints < rings.Length)
                 {
                     rings[passedCheckpoints].MarkActive();
                 }
             }
-            /*else
-            {
-                isGameFinished = true;
-                if (progressText != null)
-                {
-                    int minutes = (int)(elapsedTime / 60f);
-                    int seconds = (int)(elapsedTime % 60f);
-                    progressText.text = $"<color=yellow>STAGE CLEAR!</color>\nTIME: {minutes:00}:{seconds:00}";
-                }
-
-                if (nextStageButton != null)
-                {
-                    nextStageButton.gameObject.SetActive(true);
-                }
-            }*/
             else
             {
+                // 通關結算
                 isGameFinished = true;
                 if (progressText != null) progressText.text = $"<color=yellow>STAGE CLEAR!</color>";
 
-                // 👇 新增結算畫面與鎖定無人機
                 if (centerDisplayText != null)
                 {
                     centerDisplayText.gameObject.SetActive(true);
@@ -331,12 +223,13 @@ public class GameManager : MonoBehaviour
                     centerDisplayText.text = $"<color=yellow>FINISH!</color>\n<size=50>TIME: {minutes:00}:{seconds:00}.{milliseconds:00}</size>";
                 }
 
+                // 鎖定無人機控制
                 if (droneTransform != null)
                 {
                     DroneController1 drone = droneTransform.GetComponent<DroneController1>();
-                    if (drone != null) drone.canControl = false; // 抵達終點鎖定控制
+                    if (drone != null) drone.canControl = false;
                 }
-                
+
                 if (nextStageButton != null) nextStageButton.gameObject.SetActive(true);
             }
         }
@@ -397,12 +290,13 @@ public class GameManager : MonoBehaviour
             }
         }
     }
+
     private IEnumerator RaceCountdownRoutine()
     {
         yield return new WaitUntil(() => droneTransform != null);
         DroneController1 drone = droneTransform.GetComponent<DroneController1>();
-        
-        if (drone != null) drone.canControl = false; // 鎖定操作
+
+        if (drone != null) drone.canControl = false; // 開局鎖定控制
 
         if (centerDisplayText != null)
         {
@@ -419,8 +313,8 @@ public class GameManager : MonoBehaviour
         hasRaceStarted = true; // 正式開始計時
         if (drone != null)
         {
-            drone.canControl = true; // 解鎖操作
-            drone.isArmed = true;    // 發動引擎
+            drone.canControl = true; // 解鎖操控
+            drone.isArmed = true;    // 解鎖馬達
         }
 
         yield return new WaitForSeconds(1f);
