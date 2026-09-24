@@ -4139,6 +4139,7 @@ GameObject:
   - component: {fileID: 3202604953874514084}
   - component: {fileID: 6745821123197984501}
   - component: {fileID: 8424761602576798853}
+  - component: {fileID: 8714216822079934645}
   m_Layer: 0
   m_Name: Drone_HUD_Canvas
   m_TagString: Untagged
@@ -4153,20 +4154,20 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2018442515814503631}
-  m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
-  m_LocalPosition: {x: 0, y: 0, z: -0.7}
-  m_LocalScale: {x: 0.002, y: 0.002, z: 0.002}
+  m_LocalRotation: {x: -0, y: 0.7071068, z: 0.7071068, w: 0}
+  m_LocalPosition: {x: 0, y: 0, z: 4.2400036}
+  m_LocalScale: {x: 0.039999995, y: 0.03999999, z: 0.03999999}
   m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 3260428314031208348}
   - {fileID: 3648274160967357331}
   - {fileID: 61690404567687895}
   - {fileID: 7378316598323098847}
-  m_Father: {fileID: 6495739259207074645}
+  m_Father: {fileID: 1285100266361372945}
   m_LocalEulerAnglesHint: {x: 0, y: 180, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 0, y: 0.212}
+  m_AnchoredPosition: {x: 0, y: 12.63856}
   m_SizeDelta: {x: 400, y: 250}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!223 &4171581727876143525
@@ -4251,6 +4252,22 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   m_RaycastTriggerInteraction: 1
+--- !u!114 &8714216822079934645
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2018442515814503631}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fc3debe3dfc63f84b9c91872fb424e0f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  distance: 0.5
+  offset: {x: 0, y: -0.08, z: 0}
+  scrollSensitivity: 0.05
+  lockVerticalToGround: 0
 --- !u!1 &2142681681719497472
 GameObject:
   m_ObjectHideFlags: 0
@@ -4590,6 +4607,7 @@ Transform:
   m_Children:
   - {fileID: 5353208725593327848}
   - {fileID: 886878578836669594}
+  - {fileID: 372958841827704609}
   - {fileID: 185477713904356481}
   - {fileID: 4071370575176723340}
   - {fileID: 5642792609465246029}
@@ -18679,9 +18697,6 @@ PrefabInstance:
     - {fileID: 114000011752269458, guid: f5344c194bab9264c93ba5f2f38dab9e, type: 3}
     m_RemovedGameObjects: []
     m_AddedGameObjects:
-    - targetCorrespondingSourceObject: {fileID: 4000012611177122, guid: f5344c194bab9264c93ba5f2f38dab9e, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 372958841827704609}
     - targetCorrespondingSourceObject: {fileID: 4000010153808938, guid: f5344c194bab9264c93ba5f2f38dab9e, type: 3}
       insertIndex: 3
       addedObject: {fileID: 1037122760699329869}
@@ -18725,11 +18740,6 @@ Transform:
 --- !u!4 &6495739257617621159 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 4000012086946128, guid: f5344c194bab9264c93ba5f2f38dab9e, type: 3}
-  m_PrefabInstance: {fileID: 6497486505551956471}
-  m_PrefabAsset: {fileID: 0}
---- !u!4 &6495739259207074645 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 4000012611177122, guid: f5344c194bab9264c93ba5f2f38dab9e, type: 3}
   m_PrefabInstance: {fileID: 6497486505551956471}
   m_PrefabAsset: {fileID: 0}
 --- !u!4 &6495739263727001053 stripped
@@ -18816,6 +18826,8 @@ MonoBehaviour:
   landingSound: {fileID: 8300000, guid: b86f7945ec0fb054fa1eeba88b2e9d16, type: 3}
   engineVolume: 0.8
   respawnPosition: {x: 0, y: 0.101, z: 0}
+  hudFollower: {fileID: 8714216822079934645}
+  hudCanvasTransform: {fileID: 372958841827704609}
 --- !u!82 &6434213884267160407
 AudioSource:
   m_ObjectHideFlags: 0

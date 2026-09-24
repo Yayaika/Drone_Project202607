@@ -73,6 +73,13 @@ public class DroneController1 : MonoBehaviour
     [SerializeField] private Vector3 respawnPosition = new Vector3(0f, 1.5f, 0f);
     private bool isFlipping = false;
 
+    // 變數區新增：
+    [Header("【HUD 引用 (選填)】")]
+    [SerializeField] private VRHUDFollower hudFollower;
+
+    [Header("【HUD UI 綁定】")]
+    [SerializeField] private Transform hudCanvasTransform; // 將 Drone_HUD_Canvas 拖入這個欄位
+
     // --- 防吸附/防貼牆機制變數 ---
     private bool isTouchingWall = false;
 
@@ -179,6 +186,11 @@ public class DroneController1 : MonoBehaviour
 
         targetYawAngle = transform.eulerAngles.y;
         lastPos = transform.position;
+
+        if (hudFollower == null)
+        {
+            hudFollower = GetComponentInChildren<VRHUDFollower>(true);
+        }
     }
 
     /// <summary>
@@ -458,26 +470,30 @@ public class DroneController1 : MonoBehaviour
         targetYawAngle = transform.eulerAngles.y;
     }
 
-    /// <summary>
-    /// 【修改】視角切換方法：不再關閉/開啟 GameObject，改為切換單一 XR Origin 所掛載的空物件錨點
-    /// </summary>
+    // 3. 修改 SwitchCamera() 方法，讓切換鏡頭時自動刷新 HUD 的目標：
     private void SwitchCamera()
     {
         if (cameraPositions == null || cameraPositions.Length <= 1 || xrOriginTransform == null) return;
 
-        // 切換下一個視角索引
         currentCameraIndex = (currentCameraIndex + 1) % cameraPositions.Length;
 
-        // 即時設定 XR Origin 位置
         Transform targetPos = cameraPositions[currentCameraIndex];
         if (targetPos != null)
         {
+            // 1. 移動 XR Origin 到指定鏡頭位置
             xrOriginTransform.SetParent(targetPos);
             xrOriginTransform.localPosition = Vector3.zero;
             xrOriginTransform.localRotation = Quaternion.identity;
+
+            // 2. 切換鏡頭時，將 HUD Canvas 移到新 Main Camera 底下，第二個參數傳 true (worldPositionStays = true)
+            // 這樣能保證它掛過去後，依然維持與攝影機當前的相對擺設數值
+            if (hudCanvasTransform != null && Camera.main != null)
+            {
+                hudCanvasTransform.SetParent(Camera.main.transform, true);
+            }
         }
 
-        Debug.Log($"[DroneController] 已成功切換至視角 {currentCameraIndex + 1}: {(targetPos != null ? targetPos.name : "Unassigned")}");
+        Debug.Log($"[DroneController] 已成功切換至視角 {currentCameraIndex + 1}");
     }
 
     private void Respawn()
@@ -486,33 +502,6 @@ public class DroneController1 : MonoBehaviour
         // 這會讓 CourseBuilder 重新執行 Start()，重新隨機生成整條賽道與樹木，並將無人機擺回最乾淨的初始狀態！
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
 
-        /* 
-        // 🌟 方式 B：若你不希望重新載入場景，而是只搬回起點 (0, 1.5, 0)：
-        isArmed = false;
-        currentFlightMode = FlightMode.Stabilized;
-
-        rb.isKinematic = true;
-
-        // 強制指定起點平台的上方 (0, 1.5, 0)
-        transform.position = new Vector3(0f, 1.5f, 0f);
-        transform.rotation = Quaternion.identity;
-
-        if (xrOriginTransform != null)
-        {
-            xrOriginTransform.localPosition = Vector3.zero;
-            xrOriginTransform.localRotation = Quaternion.identity;
-        }
-
-        rb.linearVelocity = Vector3.zero;
-        rb.angularVelocity = Vector3.zero;
-        rb.isKinematic = false;
-
-        targetYawAngle = 0f;
-        isTouchingWall = false;
-        isGrounded = false;
-
-        Physics.SyncTransforms();
-        */
     }
 
     private void CheckAutoFlip()

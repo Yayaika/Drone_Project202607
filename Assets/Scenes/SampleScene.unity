@@ -240,11 +240,6 @@ MonoBehaviour:
   timerText: {fileID: 0}
   progressText: {fileID: 0}
   nextStageButton: {fileID: 0}
-  hudDistance: 0.5
-  hudOffset: {x: 0, y: -0.08, z: 0}
-  hudScale: {x: 0.0008, y: 0.0008, z: 0.0008}
-  followSpeed: 25
-  scrollSensitivity: 0.05
 --- !u!4 &581404757
 Transform:
   m_ObjectHideFlags: 0
