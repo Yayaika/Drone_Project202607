@@ -39,6 +39,8 @@ public class DroneController1 : MonoBehaviour
     [SerializeField] private float propHoverRPM = 2800f;
     [SerializeField] private float propMaxRPM = 3500f;
     private float currentVisualRpm = 0f;
+    // 新增：當玩家按下重生鍵時，對外廣播的事件
+    public event System.Action OnRespawnPressed;
 
     public bool IsEngineStarted => isArmed;
     public float CurrentRPM => currentVisualRpm;
@@ -70,7 +72,9 @@ public class DroneController1 : MonoBehaviour
     [SerializeField] private float engineVolume = 0.8f;
 
     [Header("【重生與翻正 (Respawn & Flip)】")]
-    [SerializeField] private Vector3 respawnPosition = new Vector3(0f, 1.5f, 0f);
+    //[SerializeField] private Vector3 respawnPosition = new Vector3(0f, 1.5f, 0f);
+    private Vector3 initialPosition;
+    private Quaternion initialRotation;
     private bool isFlipping = false;
 
     // 變數區新增：
@@ -101,6 +105,7 @@ public class DroneController1 : MonoBehaviour
     private float armTimer = 0f;
     private float disarmTimer = 0f;
     private bool wasGroundedLastFrame = true;
+    public bool canControl = true;
 
     private void Awake()
     {
@@ -184,6 +189,10 @@ public class DroneController1 : MonoBehaviour
         FindPropellers();
         InitializeCameras();
 
+        // 在 Start() 最下面加入這兩行，記錄剛出生時的真實座標
+        initialPosition = transform.position;
+        initialRotation = transform.rotation;
+
         targetYawAngle = transform.eulerAngles.y;
         lastPos = transform.position;
 
@@ -215,6 +224,15 @@ public class DroneController1 : MonoBehaviour
     private void Update()
     {
         if (isFlipping) return;
+
+        if (!canControl)
+        {
+            stickThrottle = 0f;
+            stickYaw = 0f;
+            stickPitch = 0f;
+            stickRoll = 0f;
+            return; 
+        }
 
         stickThrottle = throttleAction.ReadValue<float>();
         stickYaw = yawAction.ReadValue<float>();
@@ -500,7 +518,17 @@ public class DroneController1 : MonoBehaviour
     {
         // 🌟 方式 A：最乾淨、最徹底的重置方法 —— 直接重新載入當前場景
         // 這會讓 CourseBuilder 重新執行 Start()，重新隨機生成整條賽道與樹木，並將無人機擺回最乾淨的初始狀態！
-        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        //SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+
+        if (OnRespawnPressed != null)
+        {
+            OnRespawnPressed.Invoke();
+        }
+        else
+        {
+            // 如果沒有 RaceManager 監聽（例如你在沒賽道的測試場景），才退回備用位置
+            RespawnAtCheckpoint(initialPosition, initialRotation);
+        }
 
     }
 
@@ -564,5 +592,34 @@ public class DroneController1 : MonoBehaviour
         if (headingText != null) headingText.text = $"Heading:   {yaw:F0}°";
         if (positionText != null) positionText.text = $"Position:  X:{pos.x:F1}  Z:{pos.z:F1}";
         if (speedText != null) speedText.text = $"Speed:     {currentSpeed:F1} m/s";
+    }
+    // 新增給 RaceManager 呼叫的專用重生函式
+    public void RespawnAtCheckpoint(Vector3 newPos, Quaternion newRot)
+    {
+        isArmed = true; 
+        currentFlightMode = FlightMode.Stabilized;
+        
+        // ！！關鍵修復：只保留 Y 軸方向 (Yaw)，強制讓機身水平 (X=0, Z=0)
+        float flatYaw = newRot.eulerAngles.y+180f;
+        Quaternion flatRotation = Quaternion.Euler(0, flatYaw, 0);
+        
+        // 對 Rigidbody 傳送，套用過濾後的水平旋轉
+        rb.position = newPos;
+        rb.rotation = flatRotation;
+        transform.position = newPos;
+        transform.rotation = flatRotation;
+        Physics.SyncTransforms();
+        
+        // 清除殘留的物理速度
+        rb.linearVelocity = Vector3.zero;
+        rb.angularVelocity = Vector3.zero;
+        
+        // 重置內部輸入數值
+        stickPitch = 0f;
+        stickRoll = 0f;
+        stickYaw = 0f;
+        
+        // 對齊物理目標方向
+        targetYawAngle = flatYaw; 
     }
 }

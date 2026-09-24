@@ -17,6 +17,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/NextSecondScene.unity
     guid: ef417d4bc4e79ac4aaadfc6a6996f342
+  - enabled: 1
+    path: Assets/Scenes/City2.unity
+    guid: 3a97a96ced2cfba43958210006cbad25
   m_configObjects:
     Unity.XR.Oculus.Settings: {fileID: 11400000, guid: f26eca0bfa8228842a4a5243522d30f0, type: 2}
     com.unity.input.settings: {fileID: 11400000, guid: 8f0afd9317ea0ed4c946843624703497, type: 2}
