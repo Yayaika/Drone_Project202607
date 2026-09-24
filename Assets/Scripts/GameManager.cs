@@ -125,6 +125,13 @@ public class GameManager : MonoBehaviour
         {
             hudCanvas.renderMode = RenderMode.WorldSpace;
             hudCanvas.worldCamera = currentActiveCam;
+
+            // 【新增優化】：若 Canvas 上掛有 VRHUDFollower，立刻通知它更新 Target Camera
+            VRHUDFollower follower = hudCanvas.GetComponent<VRHUDFollower>();
+            if (follower != null)
+            {
+                follower.SetTargetCamera(currentActiveCam.transform);
+            }
         }
     }
 

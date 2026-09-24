@@ -4376,10 +4376,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fc3debe3dfc63f84b9c91872fb424e0f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  distance: 1
+  distance: 15
   offset: {x: 0, y: -0.08, z: 0}
   scrollSensitivity: 0.05
-  lockVerticalToGround: 0
 --- !u!1 &2142681681719497472
 GameObject:
   m_ObjectHideFlags: 0
@@ -19024,7 +19023,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4000012611177122, guid: f5344c194bab9264c93ba5f2f38dab9e, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.025
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4000012611177122, guid: f5344c194bab9264c93ba5f2f38dab9e, type: 3}
       propertyPath: m_LocalPosition.z
