@@ -17,12 +17,12 @@ MonoBehaviour:
     desc: "\u5C0F\u5DE7"
     playerObj: {fileID: 6496504088213243553, guid: 75ce034d532f9ef4aa1b7d617485ad28, type: 3}
   - name: "\u7121\u4EBA\u6A5F1"
-    desc: "\u7D05\u8272"
-    playerObj: {fileID: 5054379811673952670, guid: e746f881748d3a147949e70e5c570880, type: 3}
+    desc: "\u643A\u5E36\u70B8\u5F48\u6A21\u578B\u7684\u7121\u4EBA\u6A5F"
+    playerObj: {fileID: 6496504088213243553, guid: 1da15523527d761489cd0809bfa20d56, type: 3}
   - name: "\u7121\u4EBA\u6A5F2"
     desc: "\u9ED1\u8272\u5916\u6BBC\uFF0C\u901F\u5EA6\u5FEB"
     playerObj: {fileID: 7231887364440564934, guid: c53e58c59cba20e4ab6f2080fbdafb5f, type: 3}
   - name: "\u7121\u4EBA\u6A5F3"
     desc: "\u9EC3\u8272,\u901F\u5EA6\u5FEB"
     playerObj: {fileID: 5924121413617780456, guid: b8c5de00063898242910230cb837de87, type: 3}
-  selectedIndex: 2
+  selectedIndex: 1
