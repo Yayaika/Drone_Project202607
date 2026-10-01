@@ -166,7 +166,7 @@ public class GameManager : MonoBehaviour
             UpdateProgressUI();
         }
     }
-
+     
     // 通關結算
     public void TriggerWin()
     {
