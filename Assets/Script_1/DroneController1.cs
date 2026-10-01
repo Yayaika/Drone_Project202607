@@ -29,7 +29,7 @@ public class DroneController1 : MonoBehaviour
 
     [Header("【姿態控制 (Attitude Control)】")]
     [SerializeField] private float cruisePitchAngle = -12f;
-    [SerializeField] private float maxTiltAngle = 40f;
+    [SerializeField] private float maxTiltAngle = 20f;
     [SerializeField] private float maxYawRate = 200f;
     [SerializeField] private float stabilizerStrength = 15f;
 
@@ -479,6 +479,31 @@ public class DroneController1 : MonoBehaviour
             xrOriginTransform.SetParent(targetAnchor);
             xrOriginTransform.localPosition = Vector3.zero;
             xrOriginTransform.localRotation = Quaternion.identity;
+        }
+
+        // 🌟【新增】當切換至第一人稱視角 (currentCameraIndex == 0) 時，強制將 Main Camera 旋轉歸零，鎖定 VR 轉向
+        if (currentCameraIndex == 0 && Camera.main != null)
+        {
+            Camera.main.transform.localRotation = Quaternion.identity;
+        }
+    }
+
+    private void LateUpdate()
+    {
+        if (currentCameraIndex == 0 && Camera.main != null)
+        {
+            Transform cameraTransform = Camera.main.transform;
+            Transform parentTransform = cameraTransform.parent;
+
+            if (parentTransform != null)
+            {
+                // 讀取當前 HMD 被 TrackedPoseDriver 強制寫入的姿態旋轉
+                Quaternion hmdRotation = cameraTransform.localRotation;
+
+                // 將父物件（Camera Anchor）設為 HMD 旋轉的反向 (Inverse)
+                // 這樣 父物件旋轉 * 子物件(Camera)旋轉 = Quaternion.identity（正前方）
+                parentTransform.localRotation = Quaternion.Inverse(hmdRotation);
+            }
         }
     }
 

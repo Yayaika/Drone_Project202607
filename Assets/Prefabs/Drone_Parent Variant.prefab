@@ -22275,7 +22275,7 @@ MonoBehaviour:
   altitudeHoldStrength: 5
   horizontalSpeedBoost: 15
   cruisePitchAngle: -12
-  maxTiltAngle: 40
+  maxTiltAngle: 20
   maxYawRate: 300
   stabilizerStrength: 15
   propellers: []
