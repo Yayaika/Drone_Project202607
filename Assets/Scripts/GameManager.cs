@@ -149,11 +149,16 @@ public class GameManager : MonoBehaviour
                 }
             }
 
-            // 搜尋 Slider
+            // 修正後的 Slider 搜尋邏輯：過濾名字，避開 Volume / 音量 Slider
             Slider[] sliders = droneObj.GetComponentsInChildren<Slider>(true);
-            if (sliders.Length > 0)
+            foreach (var s in sliders)
             {
-                progressSlider = sliders[0];
+                // 只有名字包含 Progress 或 Checkpoint 的才認定為進度條
+                if (s.name.Contains("Progress") || s.name.Contains("Checkpoint") || s.name.Contains("進度"))
+                {
+                    progressSlider = s;
+                    break;
+                }
             }
 
             // 確保 Canvas 有 GraphicRaycaster（供按鈕點擊）
