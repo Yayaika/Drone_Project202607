@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.XR;
 using TMPro; // 【新增】用於支援 World Space Canvas 的 TextMeshPro 文字顯示
 using UnityEngine.SceneManagement;
 
@@ -26,6 +27,10 @@ public class DroneController1 : MonoBehaviour
     [SerializeField] private float maxThrust = 40f;
     [SerializeField] private float altitudeHoldStrength = 5f;
     [SerializeField] private float horizontalSpeedBoost = 10f;
+    [Min(0.1f)]
+    [SerializeField] private float baseMass = 1f;
+    [Min(0f)]
+    [SerializeField] private float payloadMass;
 
     [Header("【姿態控制 (Attitude Control)】")]
     [SerializeField] private float cruisePitchAngle = -12f;
@@ -106,6 +111,8 @@ public class DroneController1 : MonoBehaviour
     private float disarmTimer = 0f;
     private bool wasGroundedLastFrame = true;
     public bool canControl = true;
+    public bool IsFirstPerson => currentCameraIndex == 0;
+    public float PayloadMass => payloadMass;
 
     private void Awake()
     {
@@ -168,7 +175,7 @@ public class DroneController1 : MonoBehaviour
         // 強制將重心鎖定在正中心，避免大推力轉化為自轉力矩
         rb.centerOfMass = Vector3.zero;
 
-        rb.mass = 1.0f;
+        rb.mass = baseMass + payloadMass;
         rb.linearDamping = 1.0f;
         rb.angularDamping = 6.0f;
         rb.useGravity = true;
@@ -187,6 +194,7 @@ public class DroneController1 : MonoBehaviour
         }
 
         FindPropellers();
+        EnsureCameraPositions();
         InitializeCameras();
 
         // 在 Start() 最下面加入這兩行，記錄剛出生時的真實座標
@@ -258,8 +266,29 @@ public class DroneController1 : MonoBehaviour
             ApplyFlightPhysics();
         }
 
-        // 定期平滑同步/維護攝影機相對位置 (若有平滑追蹤需求)
-        UpdateCameraPosition();
+    }
+
+    private void LateUpdate()
+    {
+        if (!IsFirstPerson || xrOriginTransform == null)
+        {
+            return;
+        }
+
+        xrOriginTransform.localRotation = Quaternion.identity;
+
+        Camera trackedCamera = xrOriginTransform.GetComponentInChildren<Camera>(true);
+        if (trackedCamera == null)
+        {
+            return;
+        }
+
+        if (trackedCamera.transform.parent != null)
+        {
+            trackedCamera.transform.parent.localRotation = Quaternion.identity;
+        }
+
+        trackedCamera.transform.localRotation = Quaternion.identity;
     }
 
     // 碰撞防吸附判斷
@@ -337,6 +366,7 @@ public class DroneController1 : MonoBehaviour
     private void ApplyFlightPhysics()
     {
         targetYawAngle += stickYaw * maxYawRate * Time.fixedDeltaTime;
+        float payloadSpeedMultiplier = 1f / (1f + payloadMass / Mathf.Max(baseMass, 0.1f));
 
         float invertMultiplier = isInverted ? -1f : 1f;
 
@@ -373,7 +403,7 @@ public class DroneController1 : MonoBehaviour
         if (Mathf.Abs(stickThrottle) > 0.05f)
         {
             if (stickThrottle > 0)
-                finalThrust = Mathf.Lerp(hoverThrust, maxThrust, stickThrottle);
+                finalThrust = Mathf.Lerp(hoverThrust, maxThrust, stickThrottle) * payloadSpeedMultiplier;
             else
                 finalThrust = Mathf.Lerp(hoverThrust, 0f, -stickThrottle);
         }
@@ -392,7 +422,7 @@ public class DroneController1 : MonoBehaviour
         if (!isTouchingWall)
         {
             Vector3 horizontalDirection = new Vector3(transform.up.x, 0, transform.up.z);
-            rb.AddForce(horizontalDirection * horizontalSpeedBoost, ForceMode.Acceleration);
+            rb.AddForce(horizontalDirection * horizontalSpeedBoost * payloadSpeedMultiplier, ForceMode.Acceleration);
         }
     }
 
@@ -481,30 +511,20 @@ public class DroneController1 : MonoBehaviour
             xrOriginTransform.localRotation = Quaternion.identity;
         }
 
-        // 🌟【新增】當切換至第一人稱視角 (currentCameraIndex == 0) 時，強制將 Main Camera 旋轉歸零，鎖定 VR 轉向
-        if (currentCameraIndex == 0 && Camera.main != null)
+    }
+
+    public void SetPayloadMass(float mass)
+    {
+        payloadMass = Mathf.Max(0f, mass);
+        if (rb != null)
         {
-            Camera.main.transform.localRotation = Quaternion.identity;
+            rb.mass = baseMass + payloadMass;
         }
     }
 
-    private void LateUpdate()
+    public void ClearPayloadMass()
     {
-        if (currentCameraIndex == 0 && Camera.main != null)
-        {
-            Transform cameraTransform = Camera.main.transform;
-            Transform parentTransform = cameraTransform.parent;
-
-            if (parentTransform != null)
-            {
-                // 讀取當前 HMD 被 TrackedPoseDriver 強制寫入的姿態旋轉
-                Quaternion hmdRotation = cameraTransform.localRotation;
-
-                // 將父物件（Camera Anchor）設為 HMD 旋轉的反向 (Inverse)
-                // 這樣 父物件旋轉 * 子物件(Camera)旋轉 = Quaternion.identity（正前方）
-                parentTransform.localRotation = Quaternion.Inverse(hmdRotation);
-            }
-        }
+        SetPayloadMass(0f);
     }
 
     private void ToggleFlightMode()
@@ -527,6 +547,7 @@ public class DroneController1 : MonoBehaviour
             xrOriginTransform.SetParent(targetPos);
             xrOriginTransform.localPosition = Vector3.zero;
             xrOriginTransform.localRotation = Quaternion.identity;
+            SetCameraTrackingEnabled(currentCameraIndex != 0);
 
             // 2. 切換鏡頭時，將 HUD Canvas 移到新 Main Camera 底下，第二個參數傳 true (worldPositionStays = true)
             // 這樣能保證它掛過去後，依然維持與攝影機當前的相對擺設數值
@@ -578,6 +599,55 @@ public class DroneController1 : MonoBehaviour
             Transform m = transform.Find("Racing Drone Merged/" + names[i]);
             if (m != null) propellers[i] = m.Find("Prop")?.gameObject;
         }
+
+        if (propellers[0] == null && propellers[1] == null && propellers[2] == null && propellers[3] == null)
+        {
+            int propellerIndex = 0;
+            Transform[] modelParts = GetComponentsInChildren<Transform>(true);
+            foreach (Transform modelPart in modelParts)
+            {
+                if (modelPart == transform || !modelPart.name.ToLowerInvariant().Contains("prop"))
+                {
+                    continue;
+                }
+
+                propellers[propellerIndex++] = modelPart.gameObject;
+                if (propellerIndex == propellers.Length)
+                {
+                    break;
+                }
+            }
+        }
+    }
+
+    private void EnsureCameraPositions()
+    {
+        if (cameraPositions == null || cameraPositions.Length < 2)
+        {
+            cameraPositions = new Transform[2];
+        }
+
+        cameraPositions[0] = FindDeepChild(transform, "FPV_CamPos");
+        cameraPositions[1] = FindDeepChild(transform, "TPV_CamPos");
+    }
+
+    private static Transform FindDeepChild(Transform root, string childName)
+    {
+        foreach (Transform child in root)
+        {
+            if (child.name == childName)
+            {
+                return child;
+            }
+
+            Transform result = FindDeepChild(child, childName);
+            if (result != null)
+            {
+                return result;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -591,6 +661,32 @@ public class DroneController1 : MonoBehaviour
             xrOriginTransform.SetParent(cameraPositions[0]);
             xrOriginTransform.localPosition = Vector3.zero;
             xrOriginTransform.localRotation = Quaternion.identity;
+            SetCameraTrackingEnabled(false);
+        }
+    }
+
+    private void SetCameraTrackingEnabled(bool enabled)
+    {
+        if (xrOriginTransform == null)
+        {
+            return;
+        }
+
+        Camera trackedCamera = xrOriginTransform.GetComponentInChildren<Camera>(true);
+        if (trackedCamera == null)
+        {
+            return;
+        }
+
+        TrackedPoseDriver poseDriver = trackedCamera.GetComponent<TrackedPoseDriver>();
+        if (poseDriver != null)
+        {
+            poseDriver.enabled = enabled;
+        }
+
+        if (!enabled)
+        {
+            trackedCamera.transform.localRotation = Quaternion.identity;
         }
     }
 
