@@ -488,7 +488,8 @@ public class DroneController1 : MonoBehaviour
         {
             if (propellers[i] != null)
             {
-                propellers[i].transform.Rotate(Vector3.forward * currentVisualRpm * directions[i] * Time.deltaTime);
+                Vector3 rotationAxis = Vector3.forward;
+                propellers[i].transform.Rotate(rotationAxis * currentVisualRpm * directions[i] * Time.deltaTime);
             }
         }
     }
@@ -593,6 +594,30 @@ public class DroneController1 : MonoBehaviour
     private void FindPropellers()
     {
         propellers = new GameObject[4];
+        string[] rotorNames = { "rotor_left_back", "rotor_left_front", "rotor_right_back", "rotor_right_front" };
+        Transform[] modelParts = GetComponentsInChildren<Transform>(true);
+
+        // Imported FPV models expose the actual propeller meshes as named rotor objects.
+        int rotorIndex = 0;
+        foreach (string rotorName in rotorNames)
+        {
+            foreach (Transform modelPart in modelParts)
+            {
+                if (modelPart.name != rotorName)
+                {
+                    continue;
+                }
+
+                propellers[rotorIndex++] = modelPart.gameObject;
+                break;
+            }
+        }
+
+        if (rotorIndex == propellers.Length)
+        {
+            return;
+        }
+
         string[] names = { "FL_Motor_Parent", "FR_Motor_Parent", "RL_Motor_Parent", "RR_Motor_Parent" };
         for (int i = 0; i < names.Length; i++)
         {
@@ -603,7 +628,6 @@ public class DroneController1 : MonoBehaviour
         if (propellers[0] == null && propellers[1] == null && propellers[2] == null && propellers[3] == null)
         {
             int propellerIndex = 0;
-            Transform[] modelParts = GetComponentsInChildren<Transform>(true);
             foreach (Transform modelPart in modelParts)
             {
                 if (modelPart == transform || !modelPart.name.ToLowerInvariant().Contains("prop"))
@@ -629,6 +653,48 @@ public class DroneController1 : MonoBehaviour
 
         cameraPositions[0] = FindDeepChild(transform, "FPV_CamPos");
         cameraPositions[1] = FindDeepChild(transform, "TPV_CamPos");
+
+        Transform bombModel = FindDeepChild(transform, "FPV_Bomb03");
+        if (bombModel == null)
+        {
+            bombModel = FindDeepChild(transform, "FPV_Bomb02");
+        }
+        if (bombModel == null)
+        {
+            return;
+        }
+
+        if (cameraPositions[0] == null)
+        {
+            cameraPositions[0] = CreateCameraAnchor(
+                bombModel,
+                "FPV_CamPos",
+                new Vector3(0f, 0.34f, -0.24f),
+                Quaternion.identity);
+        }
+
+        if (cameraPositions[1] == null)
+        {
+            cameraPositions[1] = CreateCameraAnchor(
+                bombModel,
+                "TPV_CamPos",
+                new Vector3(0f, 0.62f, 0.95f),
+                Quaternion.identity);
+        }
+    }
+
+    private static Transform CreateCameraAnchor(
+        Transform parent,
+        string anchorName,
+        Vector3 localPosition,
+        Quaternion localRotation)
+    {
+        GameObject anchorObject = new GameObject(anchorName);
+        Transform anchor = anchorObject.transform;
+        anchor.SetParent(parent, false);
+        anchor.localPosition = localPosition;
+        anchor.localRotation = localRotation;
+        return anchor;
     }
 
     private static Transform FindDeepChild(Transform root, string childName)

@@ -22918,8 +22918,6 @@ MonoBehaviour:
   cargoLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  pickupKey: 40
-  dropKey: 38
 --- !u!1 &6496504089323365765 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 1000012899970162, guid: f5344c194bab9264c93ba5f2f38dab9e, type: 3}

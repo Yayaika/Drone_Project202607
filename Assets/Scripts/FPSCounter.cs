@@ -4,6 +4,7 @@ public class FPSCounter : MonoBehaviour
 {
     private float deltaTime = 0f;
     private GUIStyle style;
+    
 
     void Update()
     {

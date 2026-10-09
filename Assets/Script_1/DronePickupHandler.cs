@@ -7,8 +7,6 @@ public class DronePickupHandler : MonoBehaviour
     [SerializeField] private Transform pickupPoint;
     [SerializeField] private float pickupRadius = 1.5f;
     [SerializeField] private LayerMask cargoLayers = ~0;
-    [SerializeField] private Key pickupKey = Key.Z;
-    [SerializeField] private Key dropKey = Key.X;
 
     private DroneCargo carriedCargo;
     private Rigidbody carriedBody;
@@ -16,34 +14,22 @@ public class DronePickupHandler : MonoBehaviour
     private Collider[] droneColliders;
     private Rigidbody droneBody;
     private DroneController1 droneController;
-    private InputAction pickupAction;
-    private InputAction dropAction;
+    private InputAction cargoAction;
 
     public bool IsCarrying => carriedCargo != null;
 
     private void Update()
     {
-        bool pickupPressed = pickupAction != null && pickupAction.WasPressedThisFrame();
-        bool dropPressed = dropAction != null && dropAction.WasPressedThisFrame();
-
-        if (Keyboard.current != null && Keyboard.current[pickupKey].wasPressedThisFrame)
+        if (cargoAction != null && cargoAction.WasPressedThisFrame())
         {
-            pickupPressed = true;
-        }
-
-        if (Keyboard.current != null && Keyboard.current[dropKey].wasPressedThisFrame)
-        {
-            dropPressed = true;
-        }
-
-        if (pickupPressed)
-        {
-            TryPickUp();
-        }
-
-        if (dropPressed)
-        {
-            Drop();
+            if (carriedCargo == null)
+            {
+                TryPickUp();
+            }
+            else
+            {
+                Drop();
+            }
         }
     }
 
@@ -53,25 +39,20 @@ public class DronePickupHandler : MonoBehaviour
         droneBody = GetComponent<Rigidbody>();
         droneColliders = GetComponentsInChildren<Collider>();
 
-        pickupAction = new InputAction("PickupCargo");
-        pickupAction.AddBinding("<Keyboard>/z");
-        pickupAction.AddBinding("<XRController>{LeftHand}/grip");
-
-        dropAction = new InputAction("DropCargo");
-        dropAction.AddBinding("<Keyboard>/x");
-        dropAction.AddBinding("<XRController>{RightHand}/grip");
+        cargoAction = new InputAction("ToggleCargo");
+        cargoAction.AddBinding("<Keyboard>/z");
+        cargoAction.AddBinding("<Gamepad>/buttonSouth");
+        cargoAction.AddBinding("<XRController>{LeftHand}/grip");
     }
 
     private void OnEnable()
     {
-        pickupAction?.Enable();
-        dropAction?.Enable();
+        cargoAction?.Enable();
     }
 
     private void OnDisable()
     {
-        pickupAction?.Disable();
-        dropAction?.Disable();
+        cargoAction?.Disable();
     }
 
     private void TryPickUp()

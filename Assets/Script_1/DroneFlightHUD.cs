@@ -9,6 +9,8 @@ public class DroneFlightHUD : MonoBehaviour
     [SerializeField] private TMP_FontAsset chineseFont;
     [SerializeField] private Color horizonColor = new Color(0.2f, 1f, 0.75f, 0.9f);
     [SerializeField] private float horizonWidth = 420f;
+    [SerializeField] private float pitchPixelsPerDegree = 5f;
+    [SerializeField] private float maxPitchOffset = 120f;
 
     private GameObject firstPersonRoot;
     private GameObject flightHudLayer;
@@ -39,9 +41,11 @@ public class DroneFlightHUD : MonoBehaviour
         bool isFirstPerson = droneController.IsFirstPerson;
         firstPersonRoot.SetActive(isFirstPerson);
 
-        Vector3 attitude = droneController.transform.localEulerAngles;
+        Vector3 attitude = droneController.transform.eulerAngles;
+        float pitch = NormalizeAngle(attitude.x);
         float roll = NormalizeAngle(attitude.z);
-        horizonLine.anchoredPosition = Vector2.zero;
+        float pitchOffset = Mathf.Clamp(-pitch * pitchPixelsPerDegree, -maxPitchOffset, maxPitchOffset);
+        horizonLine.anchoredPosition = new Vector2(0f, pitchOffset);
         horizonLine.localRotation = Quaternion.Euler(0f, 0f, -roll);
     }
 
@@ -100,7 +104,7 @@ public class DroneFlightHUD : MonoBehaviour
         TextMeshProUGUI instructions = CreateText(
             "PickupInstructions",
             settingsPanel,
-            "抓取：Z／左手柄 Grip\n放下：X／右手柄 Grip",
+            "抓取／放下：Z／Xbox A",
             24f);
         instructions.enableWordWrapping = true;
         instructions.color = Color.white;
