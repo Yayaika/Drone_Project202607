@@ -30,7 +30,7 @@
 | 結算畫面與排行榜 | 部分完成（待實測） | `UI/ResultScreen.cs`、`Gameplay/LeaderboardStore.cs`（本機 PlayerPrefs） | 玩家名稱輸入（目前自動以無人機名稱命名） |
 | 模式/關卡選擇面板 | 部分完成（待實測） | `UI/ModeSelectPanel.cs`、`UIPlayerSelectCtrl.EnterStage` | — |
 | DOTween UI 動態 | 部分完成（待實測） | `UI/UIButtonTweenFx.cs`（自動掛到所有 Button）、`UI/UITween.cs`、`UIPanelCtrl.cs` | — |
-| 程序化城市/新關卡 | 部分完成（待實測） | `Level/CityGenerator.cs`、`Editor/DroneGameSetupMenu.cs`、`LevelCatalog.cs`（住宅區/市中心兩關） | 需執行選單建立場景；道路為純色 placeholder |
+| 程序化城市/新關卡 | 部分完成（建築已修正並於 Play 模式確認） | `Level/CityGenerator.cs`、`Editor/DroneGameSetupMenu.cs`、`LevelCatalog.cs`（住宅區/市中心兩關） | 道路為純色 placeholder；從 StartMenu 完整流程未重測 |
 | 有機城市生成器（獨立測試） | 部分完成（已在 Editor 生成並截圖確認、Play 中重建可用） | `Level/OrganicCityGenerator.cs`、`Level/OrganicCityFlyCamera.cs`、`Editor/OrganicCityGeneratorEditor.cs`、`Scenes/OrganicCityTest.unity`、`Materials/OrganicCity/` | 未接入關卡/玩法；建築已改用 POLYGON city pack 模型（放不下時少量方塊大樓補空）；街道設施與樹木使用 LowpolyStreetPack（規則可在 Inspector 新增）；中央圓環預設關閉；鍵盤操作未經實機按鍵測試 |
 | 面板（設置/操作說明/介紹） | 部分完成（待實測） | `UI/PanelEnhancer.cs`、`UI/ControlsHelp.cs`、`UI/UIPopupPanel.cs`：彈出動畫、按鍵圖示操作說明、音量百分比、返回選單、依模式顯示過關目標 | 版面需在畫面上確認 |
 | 音效 | 部分完成 | `Audio/GameAudio.cs`（依檔名從 Resources/Audio 載入，缺檔時用 `SynthSfx` 合成 placeholder）；引擎音高隨轉速變化；起飛音效已指定 | **缺 UI/倒數/檢查點/搬運/撞擊/警告音效與 BGM**，見 `ASSET_REQUESTS.md` |

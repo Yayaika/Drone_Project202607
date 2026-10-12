@@ -171,6 +171,14 @@ public partial class OrganicCityGenerator : MonoBehaviour
     [SerializeField] private Material doorMaterial;
     [SerializeField] private Material accentMaterial;
 
+    [Header("地面貼圖尺寸 (一張貼圖在世界中對應的公尺數)")]
+    [Range(1f, 40f)]
+    [SerializeField] private float roadTextureSize = 8f;
+    [Range(0.5f, 20f)]
+    [SerializeField] private float sidewalkTextureSize = 3f;
+    [Range(1f, 40f)]
+    [SerializeField] private float grassTextureSize = 8f;
+
     [Header("材質 (由選單自動建立，可留空)")]
     [SerializeField] private Material roadMaterial;
     [SerializeField] private Material sidewalkMaterial;
@@ -648,18 +656,21 @@ public partial class OrganicCityGenerator : MonoBehaviour
     private void BuildGround()
     {
         float size = cityRadius * (1f + boundaryIrregularity) * 2f + 2000f; // 夠大讓邊界隱沒在霧中
-        GameObject ground = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        ground.name = "Ground";
-        ground.transform.SetParent(root, false);
-        ground.transform.localPosition = new Vector3(0f, -0.5f, 0f);
-        ground.transform.localScale = new Vector3(size, 1f, size);
-        ground.GetComponent<Renderer>().sharedMaterial = Mat(groundMaterial, new Color(0.38f, 0.47f, 0.32f));
+        float half = size * 0.5f;
+
+        // 平面網格 + 世界座標 UV，草地貼圖才不會被拉伸
+        MeshData ground = new MeshData(1f / grassTextureSize);
+        ground.AddQuad(new Vector2(-half, -half), new Vector2(half, half), 0f);
+        GameObject groundObject = CreateMeshObject("Ground", ground, Mat(groundMaterial, new Color(0.38f, 0.47f, 0.32f)));
+        BoxCollider groundCollider = groundObject.AddComponent<BoxCollider>();
+        groundCollider.center = new Vector3(0f, -0.5f, 0f);
+        groundCollider.size = new Vector3(size, 1f, size);
     }
 
     private void BuildRoadMeshes()
     {
-        MeshData sidewalk = new MeshData();
-        MeshData asphalt = new MeshData();
+        MeshData sidewalk = new MeshData(1f / sidewalkTextureSize);
+        MeshData asphalt = new MeshData(1f / roadTextureSize);
         MeshData lines = new MeshData();
 
         foreach (Road road in roads)
@@ -689,7 +700,7 @@ public partial class OrganicCityGenerator : MonoBehaviour
 
     private void BuildPlaza()
     {
-        MeshData plaza = new MeshData();
+        MeshData plaza = new MeshData(1f / sidewalkTextureSize);
         plaza.AddDisc(Vector2.zero, plazaRadius - mainRoadWidth * 0.5f, 0.05f, 40);
         CreateMeshObject("Plaza", plaza, Mat(plazaMaterial, new Color(0.56f, 0.53f, 0.48f)));
 
@@ -715,7 +726,7 @@ public partial class OrganicCityGenerator : MonoBehaviour
         if (parkAmount <= 0f) return;
 
         const float cell = 6f;
-        MeshData grass = new MeshData();
+        MeshData grass = new MeshData(1f / grassTextureSize);
         float extent = cityRadius * (1f + boundaryIrregularity);
         for (float x = -extent; x < extent; x += cell)
         {
@@ -958,51 +969,11 @@ public partial class OrganicCityGenerator : MonoBehaviour
     /// <summary>讓模型正面朝向道路所需的額外旋轉</summary>
     private float ModelYaw(ModelInfo info) => modelYawOffset - info.FrontYaw;
 
-    private bool IsSideways(ModelInfo info)
-    {
-        float yaw = ModelYaw(info);
-        return Mathf.Abs(Mathf.DeltaAngle(yaw, 90f)) < 45f || Mathf.Abs(Mathf.DeltaAngle(yaw, 270f)) < 45f;
-    }
+    private bool IsSideways(ModelInfo info) => PolygonCityModels.IsSideways(ModelYaw(info));
 
     private float ModelAlong(ModelInfo info) => IsSideways(info) ? info.Size.z : info.Size.x;
 
     private float ModelDepth(ModelInfo info) => IsSideways(info) ? info.Size.x : info.Size.z;
-
-    /// <summary>
-    /// 以「門」子網格的法線平均方向判斷模型正面 (沒有門時改用招牌貼圖面)，取最接近的 90 度
-    /// </summary>
-    private static float DetectFrontYaw(GameObject probe)
-    {
-        foreach (string keyword in new[] { "door", "texture", "sign" })
-        {
-            Vector3 sum = Vector3.zero;
-            foreach (MeshFilter filter in probe.GetComponentsInChildren<MeshFilter>())
-            {
-                Mesh mesh = filter.sharedMesh;
-                Renderer renderer = filter.GetComponent<Renderer>();
-                if (mesh == null || renderer == null || (!mesh.isReadable && !Application.isEditor)) continue;
-
-                Vector3[] normals = mesh.normals;
-                if (normals.Length == 0) continue;
-                Material[] materials = renderer.sharedMaterials;
-                for (int sub = 0; sub < mesh.subMeshCount && sub < materials.Length; sub++)
-                {
-                    if (materials[sub] == null || !materials[sub].name.ToLowerInvariant().Contains(keyword)) continue;
-                    foreach (int index in mesh.GetTriangles(sub))
-                    {
-                        sum += filter.transform.TransformDirection(normals[index]);
-                    }
-                }
-            }
-
-            sum.y = 0f;
-            if (sum.sqrMagnitude > 1e-4f)
-            {
-                return Mathf.Round(Mathf.Atan2(sum.x, sum.z) * Mathf.Rad2Deg / 90f) * 90f;
-            }
-        }
-        return 0f;
-    }
 
     /// <summary>量測每個模型的尺寸與底部中心；保留 FBX 根節點的旋轉 (此素材包為 X 270°)</summary>
     private void PrepareModels()
@@ -1014,12 +985,8 @@ public partial class OrganicCityGenerator : MonoBehaviour
         {
             if (prefab == null) continue;
 
-            GameObject probe = Instantiate(prefab);
-            probe.transform.position = Vector3.zero;
-            Bounds bounds = WorldBounds(probe);
-            float frontYaw = DetectFrontYaw(probe);
-            DestroyImmediate(probe);
-            if (bounds.size.x < 0.5f || bounds.size.y < 0.5f || bounds.size.z < 0.5f) continue;
+            PolygonCityModels.Measurement measurement = PolygonCityModels.Measure(prefab);
+            if (!measurement.Valid) continue;
 
             Material textured = null;
             if (texturedModels != null)
@@ -1033,10 +1000,10 @@ public partial class OrganicCityGenerator : MonoBehaviour
             modelInfos.Add(new ModelInfo
             {
                 Prefab = prefab,
-                Size = bounds.size,
-                Pivot = new Vector3(bounds.center.x, bounds.min.y, bounds.center.z),
+                Size = measurement.Size,
+                Pivot = measurement.Pivot,
                 Override = textured,
-                FrontYaw = frontYaw
+                FrontYaw = measurement.FrontYaw
             });
         }
     }
@@ -1066,59 +1033,18 @@ public partial class OrganicCityGenerator : MonoBehaviour
     /// </summary>
     private void ApplyModelMaterials(GameObject model, ModelInfo info)
     {
-        Material facade = PickMaterial(facadeMaterials, new Color(0.8f, 0.78f, 0.72f));
-        Material roof = PickMaterial(roofMaterials, new Color(0.45f, 0.45f, 0.47f));
-        Material window = PickMaterial(windowMaterials, new Color(0.65f, 0.75f, 0.82f));
-
-        foreach (Renderer renderer in model.GetComponentsInChildren<Renderer>())
+        PolygonCityModels.ApplyMaterials(model, new PolygonCityModels.Palette
         {
-            Material[] materials = renderer.sharedMaterials;
-            for (int i = 0; i < materials.Length; i++)
-            {
-                if (materials[i] == null) continue;
-
-                // 素材包只有名為 Texture 的子網格 (招牌、看板) 使用模型專屬貼圖，其他面為純色
-                if (info.Override != null && materials[i].name.StartsWith("Texture", System.StringComparison.OrdinalIgnoreCase))
-                {
-                    materials[i] = info.Override;
-                    continue;
-                }
-
-                switch (ClassifyMaterial(materials[i].name))
-                {
-                    case MaterialSlot.Grass: materials[i] = Mat(parkMaterial, new Color(0.3f, 0.55f, 0.26f)); break;
-                    case MaterialSlot.Pavement: materials[i] = Mat(sidewalkMaterial, new Color(0.62f, 0.61f, 0.58f)); break;
-                    case MaterialSlot.Window: materials[i] = window; break;
-                    case MaterialSlot.Roof: materials[i] = roof; break;
-                    case MaterialSlot.Door: materials[i] = Mat(doorMaterial, new Color(0.3f, 0.26f, 0.2f)); break;
-                    case MaterialSlot.Trim: materials[i] = Mat(trimMaterial, new Color(0.25f, 0.25f, 0.25f)); break;
-                    case MaterialSlot.Accent: materials[i] = Mat(accentMaterial, new Color(0.7f, 0.3f, 0.3f)); break;
-                    default: materials[i] = facade; break;
-                }
-            }
-            renderer.sharedMaterials = materials;
-        }
-    }
-
-    private enum MaterialSlot { Facade, Window, Roof, Door, Trim, Accent, Grass, Pavement }
-
-    private static MaterialSlot ClassifyMaterial(string materialName)
-    {
-        string name = materialName.ToLowerInvariant();
-        if (name.Contains("grass")) return MaterialSlot.Grass;
-        if (name.Contains("street") || name.Contains("sideway") || name.Contains("sidewalk")) return MaterialSlot.Pavement;
-        if (name.Contains("frame") || name.Contains("board") || name.Contains("metal") || name.Contains("pole") ||
-            name.Contains("rail") || name.Contains("fire") || name.Contains("stair") || name.Contains("grid") ||
-            name.Contains("holder") || name.Contains("lines") || name.Contains("filter") || name.Contains("black") ||
-            name.Contains("platt") || name.Contains("box") || name.Contains("goals") || name.Contains("sign"))
-        {
-            return MaterialSlot.Trim;
-        }
-        if (name.Contains("window")) return MaterialSlot.Window;
-        if (name.Contains("roof") || name.Contains("floor")) return MaterialSlot.Roof;
-        if (name.Contains("door") || name.Contains("wood") || name.Contains("garage") || name.Contains("drive")) return MaterialSlot.Door;
-        if (name.Contains("red") || name.Contains("blue") || name.Contains("green") || name.Contains("brown")) return MaterialSlot.Accent;
-        return MaterialSlot.Facade;
+            Facade = PickMaterial(facadeMaterials, new Color(0.8f, 0.78f, 0.72f)),
+            Roof = PickMaterial(roofMaterials, new Color(0.45f, 0.45f, 0.47f)),
+            Window = PickMaterial(windowMaterials, new Color(0.65f, 0.75f, 0.82f)),
+            Door = Mat(doorMaterial, new Color(0.3f, 0.26f, 0.2f)),
+            Trim = Mat(trimMaterial, new Color(0.25f, 0.25f, 0.25f)),
+            Accent = Mat(accentMaterial, new Color(0.7f, 0.3f, 0.3f)),
+            Grass = Mat(parkMaterial, new Color(0.3f, 0.55f, 0.26f)),
+            Pavement = Mat(sidewalkMaterial, new Color(0.62f, 0.61f, 0.58f)),
+            Sign = info.Override
+        });
     }
 
     #endregion
@@ -1492,14 +1418,15 @@ public partial class OrganicCityGenerator : MonoBehaviour
         return box;
     }
 
-    private void CreateMeshObject(string objectName, MeshData data, Material material)
+    private GameObject CreateMeshObject(string objectName, MeshData data, Material material)
     {
-        if (data.IsEmpty) return;
+        if (data.IsEmpty) return null;
 
         GameObject meshObject = new GameObject(objectName, typeof(MeshFilter), typeof(MeshRenderer));
         meshObject.transform.SetParent(root, false);
         meshObject.GetComponent<MeshFilter>().sharedMesh = data.ToMesh(objectName);
         meshObject.GetComponent<MeshRenderer>().sharedMaterial = material;
+        return meshObject;
     }
 
     private static void DestroyObject(Object target)
@@ -1595,7 +1522,19 @@ public partial class OrganicCityGenerator : MonoBehaviour
         private readonly List<Vector2> uvs = new List<Vector2>();
         private readonly List<int> triangles = new List<int>();
 
+        /// <summary>大於 0 時改用世界座標 UV (uv = 位置 × 此值)，讓貼圖在各處大小一致</summary>
+        private readonly float worldUvScale;
+
+        public MeshData(float worldUvScale = 0f)
+        {
+            this.worldUvScale = worldUvScale;
+        }
+
         public bool IsEmpty => vertices.Count == 0;
+
+        private bool WorldUv => worldUvScale > 0f;
+
+        private Vector2 WorldUvAt(Vector3 vertex) => new Vector2(vertex.x, vertex.z) * worldUvScale;
 
         public void AddRibbon(List<Vector2> points, float halfWidth, float y)
         {
@@ -1622,8 +1561,8 @@ public partial class OrganicCityGenerator : MonoBehaviour
                 vertices.Add(new Vector3(point.x + offset.x, y, point.y + offset.y));
                 vertices.Add(new Vector3(point.x - offset.x, y, point.y - offset.y));
                 float v = distance / Mathf.Max(0.1f, halfWidth * 2f);
-                uvs.Add(new Vector2(0f, v));
-                uvs.Add(new Vector2(1f, v));
+                uvs.Add(WorldUv ? WorldUvAt(vertices[vertices.Count - 2]) : new Vector2(0f, v));
+                uvs.Add(WorldUv ? WorldUvAt(vertices[vertices.Count - 1]) : new Vector2(1f, v));
             }
 
             for (int i = 0; i < count - 1; i++)
@@ -1642,13 +1581,13 @@ public partial class OrganicCityGenerator : MonoBehaviour
         {
             int start = vertices.Count;
             vertices.Add(new Vector3(center.x, y, center.y));
-            uvs.Add(new Vector2(0.5f, 0.5f));
+            uvs.Add(WorldUv ? WorldUvAt(vertices[vertices.Count - 1]) : new Vector2(0.5f, 0.5f));
             for (int i = 0; i < sides; i++)
             {
                 float angle = i * Mathf.PI * 2f / sides;
                 Vector2 direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
                 vertices.Add(new Vector3(center.x + direction.x * radius, y, center.y + direction.y * radius));
-                uvs.Add(direction * 0.5f + Vector2.one * 0.5f);
+                uvs.Add(WorldUv ? WorldUvAt(vertices[vertices.Count - 1]) : direction * 0.5f + Vector2.one * 0.5f);
             }
             for (int i = 0; i < sides; i++)
             {
@@ -1665,10 +1604,11 @@ public partial class OrganicCityGenerator : MonoBehaviour
             vertices.Add(new Vector3(min.x, y, max.y));
             vertices.Add(new Vector3(max.x, y, max.y));
             vertices.Add(new Vector3(max.x, y, min.y));
-            uvs.Add(new Vector2(min.x, min.y) * 0.1f);
-            uvs.Add(new Vector2(min.x, max.y) * 0.1f);
-            uvs.Add(new Vector2(max.x, max.y) * 0.1f);
-            uvs.Add(new Vector2(max.x, min.y) * 0.1f);
+            float uvScale = WorldUv ? worldUvScale : 0.1f;
+            uvs.Add(new Vector2(min.x, min.y) * uvScale);
+            uvs.Add(new Vector2(min.x, max.y) * uvScale);
+            uvs.Add(new Vector2(max.x, max.y) * uvScale);
+            uvs.Add(new Vector2(max.x, min.y) * uvScale);
             triangles.Add(start);
             triangles.Add(start + 1);
             triangles.Add(start + 2);

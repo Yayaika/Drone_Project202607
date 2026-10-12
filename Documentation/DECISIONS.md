@@ -83,7 +83,7 @@
 - **決定：** 新增 `OrganicCityGenerator`（道路生長演算法：主幹道自圓環向外彎曲延伸、支路/巷道分岔並在碰到其他道路時接合成環、不規則環狀道路、Chaikin 平滑；建築沿道路切線排列並以縮小重試填滿街廓；噪聲公園與市中心高樓分布），放在獨立場景 `OrganicCityTest`，不加入 Build Settings 與 `LevelCatalog`，`CityGenerator` 與既有關卡完全未修改。
 - **取捨：** 生成內容會存進場景（約 7.6 MB）。
 - **更新（同日，使用者要求採用 POLYGON city pack）：** 先前判斷「模型尺寸極小」是誤判——FBX 根節點帶 X 270° 旋轉，被程式覆寫後模型倒地才造成假的縮放。現改為外層物件負責朝向/縮放、模型保留自身旋轉；依目標高度挑選模型並以 0.65–1.1 倍等比放置（垂直最多拉伸 1.25 倍）；以「門」子網格法線自動偵測模型正面朝向道路；素材包 FBX 材質皆為預設灰，改在實例上依子網格名稱套用素材包 `Materials/Colors_buildings`、`color_windows`，招牌子網格（`Texture*`）套用 `Materials/Material_meshs` 的貼圖材質。**素材包資產本身未修改。** 碰撞改用 BoxCollider（MeshCollider 烘焙過慢）。
-- **注意：** 既有 `CityGenerator.cs` 也以 `Quaternion.Euler(0, yaw, 0)` 覆寫模型旋轉，同樣會讓素材包模型倒地（本次未修改，待使用者決定）。
+- **注意：** 既有 `CityGenerator.cs` 原本也有同樣問題，已於 D-012 修正。
 - **相關檔案：** `Level/OrganicCityGenerator.cs`、`Level/OrganicCityFlyCamera.cs`、`Editor/OrganicCityGeneratorEditor.cs`、`Scenes/OrganicCityTest.unity`、`Materials/OrganicCity/*.mat`
 
 ## D-010：有機城市的街道設施（LowpolyStreetPack）與中央圓環
@@ -97,6 +97,21 @@
   - LowpolyStreetPack 材質全為 Built-in 著色器（URP 下呈洋紅色）：在 `Assets/Materials/OrganicCity/LowpolyStreetPack/` 建立 URP Lit 副本，生成時以材質替換表套用。**素材包本身未修改。**
   - 預設移除設施內建 Light（數百盞即時光源）並隱藏路燈光錐模型，可在 Inspector 關閉此行為。
 - **附註：** POLYGON city pack 有 24 個材質檔出現 `_Color` 由 1.0 變為 0.8 的差異，是先前字型任務呼叫 `AssetDatabase.SaveAssets()` 時一併寫出 Unity 自動同步的舊屬性；URP 以 `_BaseColor` 渲染，外觀不變。是否還原由使用者決定。
+
+## D-011：有機城市地面改用 LowpolyStreetPack 貼圖
+
+- **日期：** 2026-10-13
+- **狀態：** 已確認（使用者要求）
+- **決定：** 道路 `pavement_03`、人行道 `pavement_01`、圓環廣場 `pavement_02`、城外地面與公園 `grass.png`（地面略暗略黃以區分公園），材質為 `Assets/Materials/OrganicCity/` 下的 URP Lit（`Road_Asphalt`、`Sidewalk_Tiles`、`Plaza_Tiles`、`Ground_Grass`、`Park_Grass`）。道路、人行道、草地網格改用世界座標 UV，貼圖大小由 `roadTextureSize`／`sidewalkTextureSize`／`grassTextureSize` 調整；地面由放大的 Cube 改為平面網格 + BoxCollider。素材包貼圖與匯入設定未修改。
+
+## D-012：修正關卡城市 (CityGenerator) 的素材包建築
+
+- **日期：** 2026-10-13
+- **狀態：** 已確認（使用者要求修正原本遊戲場景內的建築城市）
+- **背景：** `CityGenerator` 以 `Euler(0, yaw, 0)` 覆寫模型根節點的 X 270° 旋轉，模型倒地後被縮放 41–150 倍，且材質全為灰色；路邊樹籬/圍欄同樣倒地。
+- **決定：** 只修正建築與路邊道具的擺放與配色，**棋盤路網、競速路線、搬運降落點與關卡參數不變**。抽出共用的 `PolygonCityModels`（量測、正面偵測、依子網格套配色），`CityGenerator` 與 `OrganicCityGenerator` 共用；編輯器端 `PolygonCityPackAssets` 共用配色填入。建築改為外層物件負責朝向/縮放、模型保留自身旋轉，等比縮放限制 0.55–1.1，縮不進地塊改用其他模型或方塊大樓；`CityProcedural.unity` 已填入配色並將 `maxVerticalStretch` 由 2 改為 1.3。
+- **影響：** 同一關卡種子的建築挑選與擺放會與修正前不同（隨機序列改變）；道路與競速路線不受影響。
+- **相關檔案：** `Level/CityGenerator.cs`、`Level/PolygonCityModels.cs`、`Level/OrganicCityGenerator.cs`、`Editor/PolygonCityPackAssets.cs`、`Editor/OrganicCityGeneratorEditor.cs`、`Editor/DroneGameSetupMenu.cs`、`Scenes/CityProcedural.unity`
 
 ## 後續決策
 

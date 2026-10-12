@@ -28,7 +28,10 @@ public class CityGenerator : MonoBehaviour, IDeliverySpotProvider
     [SerializeField] private float minBuildingHeight = 8f;
     [SerializeField] private float maxBuildingHeight = 40f;
     [Tooltip("建築模型垂直拉伸上限，避免窗戶過度變形")]
-    [SerializeField] private float maxVerticalStretch = 2f;
+    [SerializeField] private float maxVerticalStretch = 1.3f;
+    [Tooltip("建築模型最小等比縮放；素材包為真實公尺比例，太大的模型縮不進地塊時改用其他模型")]
+    [Range(0.3f, 1f)]
+    [SerializeField] private float minModelScale = 0.55f;
 
     [Header("素材 (由「無人機遊戲/建立程序化城市關卡」自動填入)")]
     [SerializeField] private GameObject[] buildingPrefabs;
@@ -38,6 +41,23 @@ public class CityGenerator : MonoBehaviour, IDeliverySpotProvider
     [SerializeField] private Material sidewalkMaterial;
     [SerializeField] private Material groundMaterial;
 
+    [Header("素材包配色 (由選單自動填入；留空則保留模型原材質)")]
+    [Tooltip("有專屬貼圖的模型：建築只在招牌子網格套用，道具整個套用")]
+    [SerializeField] private TexturedModel[] texturedModels;
+    [SerializeField] private Material[] facadeMaterials;
+    [SerializeField] private Material[] roofMaterials;
+    [SerializeField] private Material[] windowMaterials;
+    [SerializeField] private Material trimMaterial;
+    [SerializeField] private Material doorMaterial;
+    [SerializeField] private Material accentMaterial;
+
+    [System.Serializable]
+    private struct TexturedModel
+    {
+        public GameObject Model;
+        public Material Material;
+    }
+
     [Header("玩法")]
     [SerializeField] private bool buildRaceCourseInRaceMode = true;
     [SerializeField] private bool addDeliveryManagerInDeliveryMode = true;
@@ -45,6 +65,8 @@ public class CityGenerator : MonoBehaviour, IDeliverySpotProvider
     [SerializeField] private int defaultCheckpointCount = 8;
     [SerializeField] private float checkpointRadius = 4.5f;
 
+    private readonly Dictionary<GameObject, PolygonCityModels.Measurement> modelMeasurements =
+        new Dictionary<GameObject, PolygonCityModels.Measurement>();
     private readonly List<Vector3> rooftopSpots = new List<Vector3>();
     private readonly List<Vector3> streetSpots = new List<Vector3>();
     private System.Random random;
@@ -248,47 +270,96 @@ public class CityGenerator : MonoBehaviour, IDeliverySpotProvider
 
     private void PlaceBuilding(Vector3 lotCenter, float lotSize, float targetHeight, Vector3 roadSide, float centerFactor)
     {
-        bool preferSmall = targetHeight < (minBuildingHeight + maxBuildingHeight) * 0.35f;
-        GameObject prefab = PickPrefab(preferSmall ? smallBuildingPrefabs : buildingPrefabs)
-                            ?? PickPrefab(buildingPrefabs) ?? PickPrefab(smallBuildingPrefabs);
-
-        GameObject building;
-        if (prefab == null)
-        {
-            building = CreateFallbackBuilding(lotSize, targetHeight);
-        }
-        else
-        {
-            building = Instantiate(prefab, root);
-            building.name = prefab.name;
-            FitBuilding(building, lotSize, targetHeight);
-            EnsureColliders(building);
-        }
-
         // 朝向最近的道路 (轉 90 度的倍數)
         float yaw = Mathf.Abs(roadSide.x) > Mathf.Abs(roadSide.z) ? (roadSide.x > 0 ? 90f : 270f) : (roadSide.z > 0 ? 0f : 180f);
         if (random.NextDouble() < 0.5) yaw = roadSide.z > 0 ? 0f : 180f;
-        building.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
 
-        // 底部貼齊人行道、水平置中於地塊
-        Bounds bounds = WorldBounds(building);
-        Vector3 offset = lotCenter - new Vector3(bounds.center.x, bounds.min.y, bounds.center.z);
-        building.transform.position += offset;
+        bool preferSmall = targetHeight < (minBuildingHeight + maxBuildingHeight) * 0.35f;
+        GameObject building = null;
+        for (int attempt = 0; attempt < 3 && building == null; attempt++)
+        {
+            GameObject prefab = PickPrefab(preferSmall ? smallBuildingPrefabs : buildingPrefabs)
+                                ?? PickPrefab(buildingPrefabs) ?? PickPrefab(smallBuildingPrefabs);
+            if (prefab == null) break;
+            building = CreateModelBuilding(prefab, lotCenter, lotSize, targetHeight, yaw);
+        }
+
+        if (building == null)
+        {
+            building = CreateFallbackBuilding(lotSize, targetHeight);
+            building.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+
+            // 底部貼齊人行道、水平置中於地塊
+            Bounds bounds = WorldBounds(building);
+            building.transform.position += lotCenter - new Vector3(bounds.center.x, bounds.min.y, bounds.center.z);
+        }
         building.isStatic = true;
     }
 
-    private void FitBuilding(GameObject building, float lotSize, float targetHeight)
+    /// <summary>
+    /// 放置素材包建築：外層物件負責位置、朝向與縮放，模型保留自身根節點旋轉 (X 270°)，
+    /// 正面依門口方向自動朝向道路。模型縮不進地塊時回傳 null。
+    /// </summary>
+    private GameObject CreateModelBuilding(GameObject prefab, Vector3 lotCenter, float lotSize, float targetHeight, float yaw)
     {
-        building.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
-        building.transform.localScale = Vector3.one;
-        Bounds bounds = WorldBounds(building);
-        float footprint = Mathf.Max(bounds.size.x, bounds.size.z);
-        if (footprint < 0.01f || bounds.size.y < 0.01f) return;
+        if (!modelMeasurements.TryGetValue(prefab, out PolygonCityModels.Measurement measurement))
+        {
+            measurement = PolygonCityModels.Measure(prefab);
+            modelMeasurements[prefab] = measurement;
+        }
+        if (!measurement.Valid) return null;
 
-        float horizontalScale = lotSize * 0.92f / footprint;
-        float naturalHeight = bounds.size.y * horizontalScale;
-        float verticalScale = horizontalScale * Mathf.Clamp(targetHeight / naturalHeight, 1f / maxVerticalStretch, maxVerticalStretch);
-        building.transform.localScale = new Vector3(horizontalScale, verticalScale, horizontalScale);
+        float scale = Mathf.Min(lotSize * 0.92f / Mathf.Max(measurement.Size.x, measurement.Size.z), 1.1f);
+        if (scale < minModelScale) return null;
+        float stretch = Mathf.Clamp(targetHeight / (measurement.Size.y * scale), 1f / maxVerticalStretch, maxVerticalStretch);
+
+        GameObject building = new GameObject(prefab.name);
+        building.transform.SetParent(root, false);
+        building.transform.position = lotCenter;
+        building.transform.rotation = Quaternion.Euler(0f, yaw - measurement.FrontYaw, 0f);
+        building.transform.localScale = new Vector3(scale, scale * stretch, scale);
+
+        GameObject model = Instantiate(prefab, building.transform);
+        model.name = prefab.name;
+        model.transform.localPosition = -measurement.Pivot;
+
+        ApplyPackMaterials(model, prefab);
+        EnsureColliders(model);
+        return building;
+    }
+
+    /// <summary>素材包 FBX 匯入後材質皆為預設灰色，依子網格名稱改套素材包配色；未設定配色時保留原材質</summary>
+    private void ApplyPackMaterials(GameObject model, GameObject prefab)
+    {
+        if (facadeMaterials == null || facadeMaterials.Length == 0) return;
+
+        PolygonCityModels.ApplyMaterials(model, new PolygonCityModels.Palette
+        {
+            Facade = PickMaterial(facadeMaterials),
+            Roof = PickMaterial(roofMaterials),
+            Window = PickMaterial(windowMaterials),
+            Door = doorMaterial,
+            Trim = trimMaterial,
+            Accent = accentMaterial,
+            Pavement = sidewalkMaterial,
+            Sign = TexturedMaterialFor(prefab)
+        });
+    }
+
+    private Material TexturedMaterialFor(GameObject prefab)
+    {
+        if (texturedModels == null) return null;
+        foreach (TexturedModel entry in texturedModels)
+        {
+            if (entry.Model == prefab) return entry.Material;
+        }
+        return null;
+    }
+
+    private Material PickMaterial(Material[] materials)
+    {
+        if (materials == null || materials.Length == 0) return null;
+        return materials[random.Next(materials.Length)];
     }
 
     private GameObject CreateFallbackBuilding(float lotSize, float height)
@@ -320,7 +391,18 @@ public class CityGenerator : MonoBehaviour, IDeliverySpotProvider
         {
             Vector3 position = lotCenter + new Vector3(((float)random.NextDouble() - 0.5f) * lotSize * 0.7f, 0.04f,
                 ((float)random.NextDouble() - 0.5f) * lotSize * 0.7f);
-            GameObject prop = Instantiate(propPrefab, position, Quaternion.Euler(0f, random.Next(4) * 90f, 0f), root);
+            // 保留模型根節點自身的旋轉 (素材包為 X 270°)，否則樹籬/圍欄會倒在地上
+            GameObject prop = Instantiate(propPrefab, position, Quaternion.Euler(0f, random.Next(4) * 90f, 0f) * propPrefab.transform.rotation, root);
+            Material propMaterial = TexturedMaterialFor(propPrefab);
+            if (propMaterial != null)
+            {
+                foreach (Renderer propRenderer in prop.GetComponentsInChildren<Renderer>())
+                {
+                    Material[] materials = propRenderer.sharedMaterials;
+                    for (int m = 0; m < materials.Length; m++) materials[m] = propMaterial;
+                    propRenderer.sharedMaterials = materials;
+                }
+            }
             Bounds bounds = WorldBounds(prop);
             if (bounds.size.y > 4f) prop.transform.localScale *= 4f / bounds.size.y; // 避免道具比例過大
             EnsureColliders(prop);

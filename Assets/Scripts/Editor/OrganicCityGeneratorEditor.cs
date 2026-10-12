@@ -17,22 +17,7 @@ public class OrganicCityGeneratorEditor : Editor
     private const string ScenePath = "Assets/Scenes/OrganicCityTest.unity";
     private const string MaterialFolder = "Assets/Materials/OrganicCity";
     private const string CityPackRoot = "Assets/Download/POLYGON city pack/Meshes,textures";
-    private const string PackMaterialRoot = "Assets/Download/POLYGON city pack/Materials";
     private const string StreetPackRoot = "Assets/Download/LowpolyStreetPack/Prefabs";
-
-    /// <summary>模型名稱 → 素材包內的貼圖材質名稱</summary>
-    private static readonly System.Collections.Generic.Dictionary<string, string> TexturedModelMaterials =
-        new System.Collections.Generic.Dictionary<string, string>
-        {
-            { "Car_repair", "Car repair" },
-            { "Fire_department", "Fire_department" },
-            { "Building_I_3", "i4" },
-            { "Shop_A", "shop a" },
-            { "Shop_B", "shop b" },
-            { "Shop_C", "Shop_c" },
-            { "Supermaket", "supermarket" },
-            { "Gas_station_A", "gas pump" }
-        };
 
     private static OrganicCityGenerator pendingTarget;
     private static double regenerateAt;
@@ -191,41 +176,27 @@ public class OrganicCityGeneratorEditor : Editor
         GameObject[] models = LoadModels(CityPackRoot + "/Buildings_FBX").Concat(LoadModels(CityPackRoot + "/Shops_FBX")).ToArray();
         SetArray(serialized.FindProperty("buildingModels"), models);
 
-        // 有專屬貼圖的模型 → 素材包 Materials/Material_meshs 的對應材質
-        SerializedProperty textured = serialized.FindProperty("texturedModels");
-        textured.arraySize = 0;
-        foreach (GameObject model in models)
-        {
-            if (!TexturedModelMaterials.TryGetValue(model.name, out string materialName)) continue;
-            Material material = AssetDatabase.LoadAssetAtPath<Material>($"{PackMaterialRoot}/Material_meshs/{materialName}.mat");
-            if (material == null) continue;
-
-            textured.arraySize++;
-            SerializedProperty entry = textured.GetArrayElementAtIndex(textured.arraySize - 1);
-            entry.FindPropertyRelative("Model").objectReferenceValue = model;
-            entry.FindPropertyRelative("Material").objectReferenceValue = material;
-        }
-
-        // 無貼圖的大樓 → 素材包 Colors_buildings 調色盤 (排除過於鮮豔的顏色)
-        SetArray(serialized.FindProperty("facadeMaterials"), PackColors("A", "A1", "A3", "B1", "H1", "J1", "K4", "k5", "K6", "K7", "K8", "K9", "k11"));
-        SetArray(serialized.FindProperty("roofMaterials"), PackColors("A2", "J2", "J3", "K1"));
-        SetArray(serialized.FindProperty("windowMaterials"),
-            new Object[] { AssetDatabase.LoadAssetAtPath<Material>($"{PackMaterialRoot}/color_windows/Windows no light.mat") });
-        serialized.FindProperty("trimMaterial").objectReferenceValue = PackColors("K1").FirstOrDefault();
-        serialized.FindProperty("doorMaterial").objectReferenceValue = PackColors("J3").FirstOrDefault();
-        serialized.FindProperty("accentMaterial").objectReferenceValue = PackColors("I3").FirstOrDefault();
+        // 有專屬貼圖的模型與牆面/屋頂/窗戶配色 (與 CityGenerator 共用)
+        PolygonCityPackAssets.AssignPalette(serialized, models);
 
         // LowpolyStreetPack：樹木；街道設施規則只在尚未設定時填入預設值，避免覆蓋使用者自訂的規則
         SetArray(serialized.FindProperty("treePrefabs"), StreetPrefabs("Foliage/Trees", "Tree_"));
         FillStreetPackRemaps(serialized.FindProperty("propMaterialRemaps"));
         if (serialized.FindProperty("propRules").arraySize == 0) FillDefaultPropRules(serialized.FindProperty("propRules"));
 
-        serialized.FindProperty("roadMaterial").objectReferenceValue = GetMaterial("Road", new Color(0.17f, 0.17f, 0.19f), 0.35f);
-        serialized.FindProperty("sidewalkMaterial").objectReferenceValue = GetMaterial("Sidewalk", new Color(0.63f, 0.62f, 0.59f));
+        // 地面、道路、人行道、草地：LowpolyStreetPack 的可平鋪貼圖 (找不到貼圖時退回純色材質)
+        serialized.FindProperty("roadMaterial").objectReferenceValue =
+            GetTexturedMaterial("Road_Asphalt", "pavement_03.png", Color.white, 0.2f) ?? GetMaterial("Road", new Color(0.17f, 0.17f, 0.19f), 0.35f);
+        serialized.FindProperty("sidewalkMaterial").objectReferenceValue =
+            GetTexturedMaterial("Sidewalk_Tiles", "pavement_01.png", Color.white, 0.1f) ?? GetMaterial("Sidewalk", new Color(0.63f, 0.62f, 0.59f));
         serialized.FindProperty("roadLineMaterial").objectReferenceValue = GetMaterial("RoadLine", new Color(0.95f, 0.8f, 0.2f));
-        serialized.FindProperty("groundMaterial").objectReferenceValue = GetMaterial("Ground", new Color(0.4f, 0.48f, 0.33f));
-        serialized.FindProperty("parkMaterial").objectReferenceValue = GetMaterial("Park", new Color(0.3f, 0.56f, 0.27f));
-        serialized.FindProperty("plazaMaterial").objectReferenceValue = GetMaterial("Plaza", new Color(0.62f, 0.57f, 0.5f));
+        // 城市外的地面略暗略黃，公園草地保持原色，兩者才分得出來
+        serialized.FindProperty("groundMaterial").objectReferenceValue =
+            GetTexturedMaterial("Ground_Grass", "grass.png", new Color(0.8f, 0.85f, 0.68f), 0.05f) ?? GetMaterial("Ground", new Color(0.4f, 0.48f, 0.33f));
+        serialized.FindProperty("parkMaterial").objectReferenceValue =
+            GetTexturedMaterial("Park_Grass", "grass.png", new Color(1.1f, 1.15f, 1f), 0.05f) ?? GetMaterial("Park", new Color(0.3f, 0.56f, 0.27f));
+        serialized.FindProperty("plazaMaterial").objectReferenceValue =
+            GetTexturedMaterial("Plaza_Tiles", "pavement_02.png", Color.white, 0.1f) ?? GetMaterial("Plaza", new Color(0.62f, 0.57f, 0.5f));
         serialized.FindProperty("roofMaterial").objectReferenceValue = GetMaterial("Roof", new Color(0.38f, 0.39f, 0.41f));
         serialized.FindProperty("treeTrunkMaterial").objectReferenceValue = GetMaterial("TreeTrunk", new Color(0.4f, 0.28f, 0.18f));
 
@@ -387,12 +358,26 @@ public class OrganicCityGeneratorEditor : Editor
             .ToArray();
     }
 
-    private static Object[] PackColors(params string[] names)
+    /// <summary>以 LowpolyStreetPack 的貼圖建立 URP Lit 材質；貼圖不存在時回傳 null</summary>
+    private static Material GetTexturedMaterial(string materialName, string textureFile, Color tint, float smoothness)
     {
-        return names
-            .Select(name => (Object)AssetDatabase.LoadAssetAtPath<Material>($"{PackMaterialRoot}/Colors_buildings/{name}.mat"))
-            .Where(material => material != null)
-            .ToArray();
+        string path = $"{MaterialFolder}/{materialName}.mat";
+        Material existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (existing != null) return existing;
+
+        Texture2D texture = AssetDatabase.LoadAssetAtPath<Texture2D>($"Assets/Download/LowpolyStreetPack/Meshes/Textures/{textureFile}");
+        Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+        if (texture == null || shader == null) return null;
+
+        if (!AssetDatabase.IsValidFolder("Assets/Materials")) AssetDatabase.CreateFolder("Assets", "Materials");
+        if (!AssetDatabase.IsValidFolder(MaterialFolder)) AssetDatabase.CreateFolder("Assets/Materials", "OrganicCity");
+
+        Material material = new Material(shader) { name = materialName };
+        material.SetTexture("_BaseMap", texture);
+        material.SetColor("_BaseColor", tint);
+        material.SetFloat("_Smoothness", smoothness);
+        AssetDatabase.CreateAsset(material, path);
+        return material;
     }
 
     private static Material GetMaterial(string materialName, Color color, float smoothness = 0.15f)

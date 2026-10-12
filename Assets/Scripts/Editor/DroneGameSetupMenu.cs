@@ -156,6 +156,9 @@ public static class DroneGameSetupMenu
         SetArray(serialized.FindProperty("smallBuildingPrefabs"), shops);
         SetArray(serialized.FindProperty("propPrefabs"), props);
 
+        // 素材包 FBX 匯入後材質皆為灰色：填入素材包的牆面/屋頂/窗戶配色與招牌貼圖
+        PolygonCityPackAssets.AssignPalette(serialized, buildings.Concat(shops).Concat(props));
+
         GameObject cargo = AssetDatabase.LoadAssetAtPath<GameObject>(CargoPrefabPath);
         serialized.FindProperty("cargoPrefab").objectReferenceValue = cargo;
         serialized.ApplyModifiedPropertiesWithoutUndo();

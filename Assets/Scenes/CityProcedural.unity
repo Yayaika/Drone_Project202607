@@ -889,7 +889,8 @@ MonoBehaviour:
   buildingDensity: 0.85
   minBuildingHeight: 8
   maxBuildingHeight: 40
-  maxVerticalStretch: 2
+  maxVerticalStretch: 1.3
+  minModelScale: 0.55
   buildingPrefabs:
   - {fileID: 100000, guid: bbee6f5e04c54854dba4ea612e4d83c5, type: 3}
   - {fileID: 100000, guid: 58dc609a263a7af4990b33b3be735e9a, type: 3}
@@ -917,6 +918,51 @@ MonoBehaviour:
   roadMaterial: {fileID: 0}
   sidewalkMaterial: {fileID: 0}
   groundMaterial: {fileID: 0}
+  texturedModels:
+  - Model: {fileID: 100000, guid: 5f301a1810c24654091e4f8bcbff39c2, type: 3}
+    Material: {fileID: 2100000, guid: c2cd0d24c1534964ea6cfaeb51f2b9d6, type: 2}
+  - Model: {fileID: 100000, guid: e23e0fc23782369459f4fb6719065dbf, type: 3}
+    Material: {fileID: 2100000, guid: f7bec3d21e11e6d498c9dc54bb4f2d9d, type: 2}
+  - Model: {fileID: 100000, guid: 91ddddc8ac960484a9abe1b9c024542e, type: 3}
+    Material: {fileID: 2100000, guid: 75eba861b5688674a9259d1205f4c4b7, type: 2}
+  - Model: {fileID: 100000, guid: 5bb97b332176ae0499af0f666e4f5828, type: 3}
+    Material: {fileID: 2100000, guid: 1f3aed826d0deb142ae61d35be7f4ff8, type: 2}
+  - Model: {fileID: 100000, guid: 10a5393e74b9d5b418cf96bdbb0aaed1, type: 3}
+    Material: {fileID: 2100000, guid: c06185e5d01b2bb4f86fb038b61445f5, type: 2}
+  - Model: {fileID: 100000, guid: 82fffc905fad13948a591b76e545791d, type: 3}
+    Material: {fileID: 2100000, guid: d2ece15c27b1b3e42af178de8034e3be, type: 2}
+  - Model: {fileID: 100000, guid: 96aaef09f81d3bd4583753e91476cfdc, type: 3}
+    Material: {fileID: 2100000, guid: b7addb38a7c13a440a9c13d2d501f19d, type: 2}
+  - Model: {fileID: 100000, guid: 7a2a20b7d787ff94dbb3d2badebe5d32, type: 3}
+    Material: {fileID: 2100000, guid: 5a982ead24f664e4d869d95ef387a770, type: 2}
+  - Model: {fileID: 100000, guid: 89cfb2ee63c9de8428925a177ddf0559, type: 3}
+    Material: {fileID: 2100000, guid: 829d8f03a87c1894e9faa0df4c536a08, type: 2}
+  - Model: {fileID: 100002, guid: b18688407a41db44eb3a0f085e9b0e9f, type: 3}
+    Material: {fileID: 2100000, guid: 00481b12d8fb567408d3f4f4f7dcb2e8, type: 2}
+  facadeMaterials:
+  - {fileID: 2100000, guid: 3c98c150d6196ef419f666d71cf7d13f, type: 2}
+  - {fileID: 2100000, guid: 1af4b0d855a4f694baba51a55f5c6cc9, type: 2}
+  - {fileID: 2100000, guid: c4d3a0c81c5ffb34889379e1a1cf85bb, type: 2}
+  - {fileID: 2100000, guid: b1aa805cd8c03914ea529c0d11595111, type: 2}
+  - {fileID: 2100000, guid: 764481942b4df2a40857026c71dfae1f, type: 2}
+  - {fileID: 2100000, guid: 8bf8e8eb3c4ec9c4e9f79488c39bff59, type: 2}
+  - {fileID: 2100000, guid: 711bad159df31524ca17958a0c56fbf5, type: 2}
+  - {fileID: 2100000, guid: e495abf6588a1b944a3620fd1fee2b07, type: 2}
+  - {fileID: 2100000, guid: ee406a0d2cd53e046b9c7bcfdcc189a7, type: 2}
+  - {fileID: 2100000, guid: 2100b85841ac32940a50ec36409b49c0, type: 2}
+  - {fileID: 2100000, guid: 4a68a0cfc4d91c447b2fe408cb8e7dca, type: 2}
+  - {fileID: 2100000, guid: 8d368d2c617522b4f8385162f26cacfa, type: 2}
+  - {fileID: 2100000, guid: a7f2d3722f408d146b37cba315bc996f, type: 2}
+  roofMaterials:
+  - {fileID: 2100000, guid: 5188c7492ef51d143a7128aa9700788a, type: 2}
+  - {fileID: 2100000, guid: fe6ba248f97095d49869fcb5611b50d4, type: 2}
+  - {fileID: 2100000, guid: 5fd1fed63457bc14abea612957703653, type: 2}
+  - {fileID: 2100000, guid: 1a0dec1fa084e1b4abd7c6cf33e568ff, type: 2}
+  windowMaterials:
+  - {fileID: 2100000, guid: 26df91506bf83b343b8083c5322323ae, type: 2}
+  trimMaterial: {fileID: 2100000, guid: 1a0dec1fa084e1b4abd7c6cf33e568ff, type: 2}
+  doorMaterial: {fileID: 2100000, guid: 5fd1fed63457bc14abea612957703653, type: 2}
+  accentMaterial: {fileID: 2100000, guid: ce22e4b8667c6c4498256004a51def48, type: 2}
   buildRaceCourseInRaceMode: 1
   addDeliveryManagerInDeliveryMode: 1
   cargoPrefab: {fileID: 3184246940758794210, guid: 42c1e37123b01cc43b3504821efe8fba, type: 3}
