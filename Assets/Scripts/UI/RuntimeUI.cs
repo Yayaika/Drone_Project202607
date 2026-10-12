@@ -102,8 +102,12 @@ public static class RuntimeUI
         return button;
     }
 
+    /// <summary>專案指定的中文字型 (能正常顯示漢字的版本)</summary>
+    public const string ChineseFontName = "YuPearl-Medium SDF";
+
     /// <summary>
-    /// 優先使用專案內已載入的中文字型 (YuPearl)，避免中文顯示成方塊
+    /// 優先使用「YuPearl-Medium SDF」中文字型 (字元較完整)，避免中文顯示成方塊
+    /// (「YuPearl-Medium SDF 1」已不再使用)
     /// </summary>
     public static TMP_FontAsset ResolveFont()
     {
@@ -112,9 +116,23 @@ public static class RuntimeUI
             return cachedFont;
         }
 
+        // 1. TMP Settings 的全域後備字型 (已設為 YuPearl-Medium SDF，執行時一定會載入)
+        if (TMP_Settings.fallbackFontAssets != null)
+        {
+            foreach (TMP_FontAsset font in TMP_Settings.fallbackFontAssets)
+            {
+                if (font != null && font.name == ChineseFontName)
+                {
+                    cachedFont = font;
+                    return cachedFont;
+                }
+            }
+        }
+
+        // 2. 已載入記憶體中的同名字型
         foreach (TMP_FontAsset font in Resources.FindObjectsOfTypeAll<TMP_FontAsset>())
         {
-            if (font != null && font.name.IndexOf("YuPearl", StringComparison.OrdinalIgnoreCase) >= 0)
+            if (font != null && font.name == ChineseFontName)
             {
                 cachedFont = font;
                 return cachedFont;
@@ -131,9 +149,10 @@ public static class RuntimeUI
         return TMP_Settings.defaultFontAsset;
     }
 
+    /// <summary>外部指定字型；只接受 ChineseFontName，避免傳入缺字或英文字型</summary>
     public static void SetPreferredFont(TMP_FontAsset font)
     {
-        if (font != null)
+        if (font != null && font.name == ChineseFontName)
         {
             cachedFont = font;
         }

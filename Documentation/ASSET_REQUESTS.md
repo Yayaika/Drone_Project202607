@@ -1,6 +1,6 @@
 # 素材需求清單（Asset Requests）
 
-> 以下素材在 `Assets/Download/` 及專案內都找不到，程式已預留位置；缺檔時會靜音略過，並在 Console 列出缺少的檔名。
+> 以下素材在 `Assets/Download/` 及專案內都找不到，程式已預留位置。缺少的**音效**目前會以程式合成的簡單音效（`SynthSfx`，placeholder）代替；**BGM** 缺檔則靜音。放入正式檔案後會自動優先使用。
 
 ## 1. 音效（放入 `Assets/Resources/Audio/`，副檔名 wav / mp3 / ogg 皆可）
 

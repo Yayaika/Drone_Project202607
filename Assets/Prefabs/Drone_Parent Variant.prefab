@@ -4279,8 +4279,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: "\u9375\u76E4\u64CD\u63A7"
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 1805255030e4fbd4799d81ece5e6daa4, type: 2}
-  m_sharedMaterial: {fileID: 2308706041209691804, guid: 1805255030e4fbd4799d81ece5e6daa4, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 8c844ed2dfbb7244eabe15c0c3623702, type: 2}
+  m_sharedMaterial: {fileID: 1078272101928917611, guid: 8c844ed2dfbb7244eabe15c0c3623702, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -5676,6 +5676,17 @@ MonoBehaviour:
   chineseFont: {fileID: 11400000, guid: 8c844ed2dfbb7244eabe15c0c3623702, type: 2}
   horizonColor: {r: 0.2, g: 1, b: 0.75, a: 0.9}
   horizonWidth: 420
+  pitchPixelsPerDegree: 5
+  maxPitchOffset: 120
+  showOsd: 1
+  hideLegacyTelemetryPanel: 1
+  osdFontSize: 11
+  osdScale: 1.45
+  headingPixelsPerDegree: 2.2
+  sideColumnOffset: 150
+  topBottomOffset: 112
+  warningColor: {r: 1, g: 0.32, b: 0.25, a: 1}
+  cautionColor: {r: 1, g: 0.85, b: 0.2, a: 1}
 --- !u!1 &2142681681719497472
 GameObject:
   m_ObjectHideFlags: 0
@@ -6693,8 +6704,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: "\u7121\u4EBA\u6A5F\u97F3\u91CF"
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 1805255030e4fbd4799d81ece5e6daa4, type: 2}
-  m_sharedMaterial: {fileID: 2308706041209691804, guid: 1805255030e4fbd4799d81ece5e6daa4, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 8c844ed2dfbb7244eabe15c0c3623702, type: 2}
+  m_sharedMaterial: {fileID: 1078272101928917611, guid: 8c844ed2dfbb7244eabe15c0c3623702, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -16329,8 +16340,8 @@ MonoBehaviour:
 
 '
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
-  m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 8c844ed2dfbb7244eabe15c0c3623702, type: 2}
+  m_sharedMaterial: {fileID: 1078272101928917611, guid: 8c844ed2dfbb7244eabe15c0c3623702, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -20886,8 +20897,8 @@ MonoBehaviour:
 
 '
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
-  m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 8c844ed2dfbb7244eabe15c0c3623702, type: 2}
+  m_sharedMaterial: {fileID: 1078272101928917611, guid: 8c844ed2dfbb7244eabe15c0c3623702, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -22783,6 +22794,17 @@ MonoBehaviour:
   maxTiltAngle: 20
   maxYawRate: 300
   stabilizerStrength: 15
+  attitudeDamping: 0.8
+  attitudeGain: 2
+  stickExpo: 0.3
+  stickResponse: 8
+  yawAcceleration: 900
+  payloadAgilityLoss: 0.35
+  turbulenceStrength: 0.25
+  wallPushOut: 6
+  wallBounce: 0.2
+  groundNormalThreshold: 0.6
+  batteryHoverSeconds: 600
   propellers: []
   propIdleRPM: 800
   propHoverRPM: 2800
@@ -22791,6 +22813,10 @@ MonoBehaviour:
   cameraPositions:
   - {fileID: 5276270790676967624}
   - {fileID: 1637638950064171613}
+  stabilizeThirdPersonCamera: 1
+  tpvYawSharpness: 6
+  tpvPositionSharpness: 25
+  fpvHorizonStabilization: 0
   statusText: {fileID: 5071699659797250381}
   altitudeText: {fileID: 3414578595120140785}
   headingText: {fileID: 5206517299864125414}
@@ -22918,6 +22944,9 @@ MonoBehaviour:
   cargoLayers:
     serializedVersion: 2
     m_Bits: 4294967295
+  attachDuration: 0.25
+  dropIgnoreCollisionTime: 0.5
+  crashDamageTransfer: 0.8
 --- !u!1 &6496504089323365765 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 1000012899970162, guid: f5344c194bab9264c93ba5f2f38dab9e, type: 3}

@@ -76,7 +76,7 @@ public class DroneFlightHUD : MonoBehaviour
         {
             CreateHudElements();
         }
-        CreatePickupInstructions();
+        // 操作說明 (含抓取/放下) 已由 PanelEnhancer 重建於「操作介紹面板」
         CreateOsd();
 
         toggleOsdAction = new InputAction("ToggleOSD", binding: "<Keyboard>/h");
@@ -190,29 +190,6 @@ public class DroneFlightHUD : MonoBehaviour
         firstPersonRoot = firstPerson.gameObject;
         horizonLine = horizon.GetComponent<RectTransform>();
         return horizonLine != null;
-    }
-
-    private void CreatePickupInstructions()
-    {
-        Transform settingsPanel = FindDeepChild(transform, "[Panel]設置");
-        if (settingsPanel == null || settingsPanel.Find("PickupInstructions") != null)
-        {
-            return;
-        }
-
-        TextMeshProUGUI instructions = CreateText(
-            "PickupInstructions",
-            settingsPanel,
-            "抓取／放下：Z／Xbox A　OSD 切換：H",
-            24f);
-        instructions.textWrappingMode = TextWrappingModes.Normal;
-        instructions.color = Color.white;
-        instructions.alignment = TextAlignmentOptions.Left;
-        instructions.margin = new Vector4(8f, 4f, 8f, 4f);
-        instructions.rectTransform.anchorMin = new Vector2(0.08f, 0.08f);
-        instructions.rectTransform.anchorMax = new Vector2(0.92f, 0.25f);
-        instructions.rectTransform.offsetMin = Vector2.zero;
-        instructions.rectTransform.offsetMax = Vector2.zero;
     }
 
     #endregion
@@ -587,10 +564,8 @@ public class DroneFlightHUD : MonoBehaviour
             return chineseFont;
         }
 
-        TextMeshProUGUI existingText = GetComponentInChildren<TextMeshProUGUI>(true);
-        return existingText != null && existingText.font != null
-            ? existingText.font
-            : TMP_Settings.defaultFontAsset;
+        // 不再沿用畫布上第一個文字的字型 (可能是沒有中文的 LiberationSans)
+        return RuntimeUI.ResolveFont();
     }
 
     private static Transform FindDeepChild(Transform root, string childName)

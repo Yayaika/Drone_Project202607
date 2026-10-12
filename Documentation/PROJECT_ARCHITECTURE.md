@@ -19,7 +19,7 @@
 | `Assets/Scripts/` | 遊戲流程：`GameManager`、`SpawnCtrl`、`CourseBuilder`、選單/UI | |
 | `Assets/Scripts/Gameplay/` | 新增：關卡目錄、場景切換、排行榜、搬運任務、導航目標、執行時材質 | |
 | `Assets/Scripts/UI/` | UI：選無人機、`UIPanelCtrl`、新增 `RuntimeUI`/`UITween`/`UIButtonTweenFx`/`ModeSelectPanel`/`ResultScreen` | |
-| `Assets/Scripts/Level/` | 新增：`CityGenerator` 程序化城市 | |
+| `Assets/Scripts/Level/` | 新增：`CityGenerator` 程序化城市；`OrganicCityGenerator` 有機城市（獨立測試，與關卡無相依） | |
 | `Assets/Scripts/Audio/` | 新增：`GameAudio` 音效服務 | |
 | `Assets/Scripts/Editor/` | 新增：`DroneGameSetupMenu`（選單「無人機遊戲/…」） | |
 | `Assets/Mapscript/` | City2 的 Spline 賽道：`RaceManager`(`RaceManger.cs`)、`GateTrigger`(`Cricle.cs`) | |
@@ -36,6 +36,7 @@
 | SampleScene | 訓練場（`CourseBuilder` 隨機穿圈） | 關卡目錄 | 已存在 |
 | City2 | 手工城市＋Spline 賽道 | 關卡目錄 | 已存在 |
 | CityProcedural | 程序化城市（兩個關卡共用） | 關卡目錄；以選單 1 從 SampleScene 複製建立 | **需執行選單建立** |
+| OrganicCityTest | 有機城市生成器測試（自由飛行相機） | 無（未加入 Build Settings / LevelCatalog） | 選單 4 可重建 |
 | NextSecondScene、DronePickupTest、SceneTestDrone、PlayerSetting2 | 測試用 | — | 未納入流程 |
 
 ## 4. 主要程式與責任

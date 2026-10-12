@@ -74,7 +74,7 @@ public static class GameAudio
 
     public static void Play(GameSfx sfx, float volumeScale = 1f)
     {
-        AudioClip clip = Load(SfxFileName(sfx));
+        AudioClip clip = LoadSfx(sfx);
         if (clip == null) return;
 
         EnsureSources();
@@ -84,7 +84,7 @@ public static class GameAudio
     /// <summary>在世界座標播放 3D 音效 (撞擊、貨物落地等)</summary>
     public static void PlayAt(GameSfx sfx, Vector3 position, float volumeScale = 1f)
     {
-        AudioClip clip = Load(SfxFileName(sfx));
+        AudioClip clip = LoadSfx(sfx);
         if (clip == null) return;
 
         AudioSource.PlayClipAtPoint(clip, position, volumeScale);
@@ -114,6 +114,25 @@ public static class GameAudio
         if (musicSource != null) musicSource.volume = musicVolume;
     }
 
+    /// <summary>
+    /// 優先使用 Resources/Audio 的正式音效檔；缺檔時改用程式合成的 placeholder 音效，
+    /// 讓按鈕、倒數、提示等在補齊素材前也有聲音回饋。
+    /// </summary>
+    private static AudioClip LoadSfx(GameSfx sfx)
+    {
+        AudioClip clip = Load(SfxFileName(sfx));
+        if (clip != null || !UseSynthFallback) return clip;
+
+        string key = "synth_" + sfx;
+        if (cache.TryGetValue(key, out AudioClip synth) && synth != null) return synth;
+        synth = SynthSfx.Create(sfx);
+        cache[key] = synth;
+        return synth;
+    }
+
+    /// <summary>缺少音效檔時是否使用合成音效 (設為 false 則缺檔靜音)</summary>
+    public static bool UseSynthFallback = true;
+
     private static AudioClip Load(string fileName)
     {
         if (string.IsNullOrEmpty(fileName)) return null;
@@ -123,7 +142,7 @@ public static class GameAudio
         cache[fileName] = clip;
         if (clip == null && missing.Add(fileName))
         {
-            Debug.Log($"[GameAudio] 尚未提供音效「{fileName}」，請放入 Assets/Resources/Audio/{fileName}.wav (或 .mp3/.ogg)。目前缺少：{string.Join(", ", missing)}");
+            Debug.Log($"[GameAudio] 尚未提供音效「{fileName}」，暫用合成音效 (BGM 則靜音)。請放入 Assets/Resources/Audio/{fileName}.wav (或 .mp3/.ogg)。目前缺少：{string.Join(", ", missing)}");
         }
         return clip;
     }
