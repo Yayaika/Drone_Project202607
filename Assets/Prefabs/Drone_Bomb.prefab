@@ -15643,7 +15643,7 @@ MonoBehaviour:
   positionText: {fileID: 8640670007820949029}
   speedText: {fileID: 4235837107075266500}
   engineAudioSource: {fileID: 6434213884267160407}
-  takeoffSound: {fileID: 0}
+  takeoffSound: {fileID: 8300000, guid: 8eeeff7d94f5bfd4abbbcfdb76418fb3, type: 3}
   flyingLoopSound: {fileID: 8300000, guid: ec583c258f813344ba8eb42a580b1cf1, type: 3}
   landingSound: {fileID: 8300000, guid: b86f7945ec0fb054fa1eeba88b2e9d16, type: 3}
   engineVolume: 0.7

@@ -37,6 +37,38 @@ public class DroneController1 : MonoBehaviour
     [SerializeField] private float maxTiltAngle = 20f;
     [SerializeField] private float maxYawRate = 200f;
     [SerializeField] private float stabilizerStrength = 15f;
+    [Tooltip("姿態角速度阻尼 (D 項)，越大越不會過衝")]
+    [SerializeField] private float attitudeDamping = 0.8f;
+    [Tooltip("姿態控制整體增益 (原版程式重複施加兩次扭力，等同 2 倍)")]
+    [SerializeField] private float attitudeGain = 2f;
+
+    [Header("【操控手感 (Handling Feel)】")]
+    [Tooltip("搖桿 Expo 曲線 (0 = 線性，越大中心越細膩)")]
+    [Range(0f, 1f)]
+    [SerializeField] private float stickExpo = 0.3f;
+    [Tooltip("搖桿輸入平滑速度 (每秒)，讓鍵盤數位輸入也有類比感")]
+    [SerializeField] private float stickResponse = 8f;
+    [Tooltip("偏航角加速度 (度/秒²)，避免瞬間轉向")]
+    [SerializeField] private float yawAcceleration = 900f;
+    [Tooltip("載重時姿態反應降低的比例 (0~1)")]
+    [Range(0f, 1f)]
+    [SerializeField] private float payloadAgilityLoss = 0.35f;
+    [Tooltip("空中氣流擾動強度 (m/s²)，0 = 關閉")]
+    [SerializeField] private float turbulenceStrength = 0.25f;
+
+    [Header("【碰撞防吸附 (Anti-Stick)】")]
+    [Tooltip("接觸牆面時往外推開的加速度 (m/s²)")]
+    [SerializeField] private float wallPushOut = 6f;
+    [Tooltip("撞牆時保留的反彈比例")]
+    [Range(0f, 1f)]
+    [SerializeField] private float wallBounce = 0.2f;
+    [Tooltip("法線 Y 值大於此值的接觸視為地面/屋頂，不做防吸附處理")]
+    [Range(0f, 1f)]
+    [SerializeField] private float groundNormalThreshold = 0.6f;
+
+    [Header("【模擬電池 (Simulated Battery)】")]
+    [Tooltip("懸停狀態下電量從 100% 用到 0% 所需秒數")]
+    [SerializeField] private float batteryHoverSeconds = 600f;
 
     [Header("【螺旋槳視覺效果 (Propeller Visuals)】")]
     [SerializeField] private GameObject[] propellers;
@@ -57,6 +89,23 @@ public class DroneController1 : MonoBehaviour
     [Tooltip("兩個視角的掛載空物件錨點 (例如 Element 0: FPV_CamPos, Element 1: TPV_CamPos)")]
     [SerializeField] private Transform[] cameraPositions;
     private int currentCameraIndex = 0;
+
+    [Header("【防暈眩鏡頭 (Comfort Camera)】")]
+    [Tooltip("第三人稱鏡頭只跟隨無人機航向，不跟著俯仰/橫滾傾斜")]
+    [SerializeField] private bool stabilizeThirdPersonCamera = true;
+    [Tooltip("第三人稱鏡頭航向跟隨速度，越小越柔和")]
+    [SerializeField] private float tpvYawSharpness = 6f;
+    [Tooltip("第三人稱鏡頭位置跟隨速度，越大越貼緊")]
+    [SerializeField] private float tpvPositionSharpness = 25f;
+    [Tooltip("第一人稱視角水平穩定程度 (0 = 真實 FPV 跟著傾斜，1 = 地平線完全鎖定)")]
+    [Range(0f, 1f)]
+    [SerializeField] private float fpvHorizonStabilization = 0f;
+
+    private Transform tpvRig;
+    private Vector3 tpvLocalOffset;
+    private Quaternion tpvLocalRotation = Quaternion.identity;
+    private float tpvSmoothedYaw;
+    private bool tpvOffsetCaptured;
 
     [Header("【VR World Space UI 介面】")]
     [Tooltip("若使用跟隨無人機的 World Space Canvas，請拖入對應 TextMeshProUGUI 組件")]
@@ -91,6 +140,18 @@ public class DroneController1 : MonoBehaviour
 
     // --- 防吸附/防貼牆機制變數 ---
     private bool isTouchingWall = false;
+    private Vector3 accumulatedWallNormal;
+    private int wallContactCount;
+
+    // --- 遙測數據 (供 HUD 與遊戲規則使用) ---
+    private float lastThrustAcceleration;
+    private float altitudeAboveGround = -1f;
+    private float batteryPercent = 100f;
+    private float currentYawRate;
+    private float turbulenceSeed;
+
+    /// <summary>撞擊事件，參數為相對撞擊速度 (m/s)</summary>
+    public event System.Action<float> OnCrash;
 
     // --- 輸入系統 (Input Actions) ---
     private InputAction throttleAction;
@@ -113,6 +174,34 @@ public class DroneController1 : MonoBehaviour
     public bool canControl = true;
     public bool IsFirstPerson => currentCameraIndex == 0;
     public float PayloadMass => payloadMass;
+
+    // --- 遙測 (Telemetry) ---
+    public FlightMode CurrentFlightMode => currentFlightMode;
+    public string FlightModeLabel => currentFlightMode switch
+    {
+        FlightMode.Cruise => "CRUISE",
+        FlightMode.Vertical => "VERT",
+        _ => "ANGLE"
+    };
+    public Vector3 Velocity => rb != null ? rb.linearVelocity : Vector3.zero;
+    public float GroundSpeed => new Vector2(Velocity.x, Velocity.z).magnitude;
+    public float VerticalSpeed => Velocity.y;
+    /// <summary>相對起飛點的高度 (m)</summary>
+    public float RelativeAltitude => transform.position.y - initialPosition.y;
+    /// <summary>離正下方地面/屋頂的距離 (m)，-1 表示超出量測範圍</summary>
+    public float AltitudeAboveGround => altitudeAboveGround;
+    /// <summary>目前推力佔最大推力的比例 (0~1)</summary>
+    public float Throttle01 => maxThrust > 0f ? Mathf.Clamp01(lastThrustAcceleration / maxThrust) : 0f;
+    public float BatteryPercent => batteryPercent;
+    public Vector3 HomePosition => initialPosition;
+    public bool IsTouchingObstacle => isTouchingWall;
+    public float PitchAngle => NormalizeAngle(transform.eulerAngles.x);
+    public float RollAngle => NormalizeAngle(transform.eulerAngles.z);
+    public float Heading => YawOf(transform);
+    /// <summary>第一人稱鏡頭錨點 (HUD 以此計算玩家實際看到的姿態)</summary>
+    public Transform FirstPersonAnchor => cameraPositions != null && cameraPositions.Length > 0 && cameraPositions[0] != null
+        ? cameraPositions[0]
+        : transform;
 
     private void Awake()
     {
@@ -153,14 +242,25 @@ public class DroneController1 : MonoBehaviour
         toggleModeAction.Enable(); switchCamAction.Enable();
         respawnAction.Enable(); toggleInvertAction.Enable();
 
-        toggleModeAction.performed += _ => ToggleFlightMode();
-        switchCamAction.performed += _ => SwitchCamera();
-        respawnAction.performed += _ => Respawn();
-        toggleInvertAction.performed += _ => ToggleInvertControls();
+        // 使用具名方法訂閱，避免 OnEnable 多次觸發時重複綁定
+        toggleModeAction.performed += OnToggleModePerformed;
+        switchCamAction.performed += OnSwitchCamPerformed;
+        respawnAction.performed += OnRespawnPerformed;
+        toggleInvertAction.performed += OnToggleInvertPerformed;
     }
+
+    private void OnToggleModePerformed(InputAction.CallbackContext _) { if (canControl) ToggleFlightMode(); }
+    private void OnSwitchCamPerformed(InputAction.CallbackContext _) => SwitchCamera();
+    private void OnRespawnPerformed(InputAction.CallbackContext _) { if (canControl) Respawn(); }
+    private void OnToggleInvertPerformed(InputAction.CallbackContext _) => ToggleInvertControls();
 
     private void OnDisable()
     {
+        toggleModeAction.performed -= OnToggleModePerformed;
+        switchCamAction.performed -= OnSwitchCamPerformed;
+        respawnAction.performed -= OnRespawnPerformed;
+        toggleInvertAction.performed -= OnToggleInvertPerformed;
+
         throttleAction.Disable(); yawAction.Disable();
         pitchAction.Disable(); rollAction.Disable();
         toggleModeAction.Disable(); switchCamAction.Disable();
@@ -195,6 +295,7 @@ public class DroneController1 : MonoBehaviour
 
         FindPropellers();
         EnsureCameraPositions();
+        CaptureThirdPersonOffset();
         InitializeCameras();
 
         // 在 Start() 最下面加入這兩行，記錄剛出生時的真實座標
@@ -203,6 +304,7 @@ public class DroneController1 : MonoBehaviour
 
         targetYawAngle = transform.eulerAngles.y;
         lastPos = transform.position;
+        turbulenceSeed = Random.Range(0f, 1000f);
 
         if (hudFollower == null)
         {
@@ -233,27 +335,41 @@ public class DroneController1 : MonoBehaviour
     {
         if (isFlipping) return;
 
+        UpdateGroundedState();
+        UpdateAltitudeAboveGround();
+
         if (!canControl)
         {
             stickThrottle = 0f;
             stickYaw = 0f;
             stickPitch = 0f;
             stickRoll = 0f;
-            return; 
+        }
+        else
+        {
+            // 數位/類比輸入統一經過 Expo 曲線與平滑，讓鍵盤操作也有細膩手感
+            float dt = Time.deltaTime;
+            stickThrottle = SmoothStick(stickThrottle, throttleAction.ReadValue<float>(), 0f, dt);
+            stickYaw = SmoothStick(stickYaw, yawAction.ReadValue<float>(), stickExpo, dt);
+            stickPitch = SmoothStick(stickPitch, pitchAction.ReadValue<float>(), stickExpo, dt);
+            stickRoll = SmoothStick(stickRoll, rollAction.ReadValue<float>(), stickExpo, dt);
+
+            HandleArmingState();
         }
 
-        stickThrottle = throttleAction.ReadValue<float>();
-        stickYaw = yawAction.ReadValue<float>();
-        stickPitch = pitchAction.ReadValue<float>();
-        stickRoll = rollAction.ReadValue<float>();
-
-        UpdateGroundedState();
-        HandleArmingState();
         UpdatePropellersVisual();
         UpdateAudio();
+        UpdateBattery();
         UpdateHUDData(); // 【新增】即時更新 World Space Canvas 的飛行數據
 
         wasGroundedLastFrame = isGrounded;
+    }
+
+    private float SmoothStick(float current, float raw, float expo, float dt)
+    {
+        raw = Mathf.Clamp(raw, -1f, 1f);
+        float shaped = raw * (1f - expo) + raw * raw * raw * expo;
+        return Mathf.MoveTowards(current, shaped, stickResponse * dt);
     }
 
     private void FixedUpdate()
@@ -261,21 +377,41 @@ public class DroneController1 : MonoBehaviour
         if (isFlipping) return;
         CheckAutoFlip();
 
+        isTouchingWall = wallContactCount > 0;
+
         if (isArmed)
         {
             ApplyFlightPhysics();
         }
+        else
+        {
+            lastThrustAcceleration = 0f;
+        }
 
+        if (isTouchingWall)
+        {
+            ResolveWallContact();
+        }
+
+        // 接觸資料由下一次物理步驟的 OnCollisionStay 重新收集
+        accumulatedWallNormal = Vector3.zero;
+        wallContactCount = 0;
     }
 
     private void LateUpdate()
     {
-        if (!IsFirstPerson || xrOriginTransform == null)
+        if (xrOriginTransform == null)
         {
             return;
         }
 
-        xrOriginTransform.localRotation = Quaternion.identity;
+        if (!IsFirstPerson)
+        {
+            UpdateStabilizedThirdPersonRig(Time.deltaTime);
+            return;
+        }
+
+        xrOriginTransform.localRotation = GetFirstPersonStabilization();
 
         Camera trackedCamera = xrOriginTransform.GetComponentInChildren<Camera>(true);
         if (trackedCamera == null)
@@ -291,25 +427,144 @@ public class DroneController1 : MonoBehaviour
         trackedCamera.transform.localRotation = Quaternion.identity;
     }
 
-    // 碰撞防吸附判斷
-    private void OnCollisionStay(Collision collision)
+    private void OnDestroy()
     {
-        if (!isGrounded)
+        if (tpvRig != null)
         {
-            isTouchingWall = true;
+            Destroy(tpvRig.gameObject);
         }
     }
 
-    private void OnCollisionExit(Collision collision)
+    /// <summary>
+    /// 第一人稱的地平線穩定：依比例抵銷機身的俯仰與橫滾 (0 = 不抵銷)
+    /// </summary>
+    private Quaternion GetFirstPersonStabilization()
     {
-        isTouchingWall = false;
+        if (fpvHorizonStabilization <= 0f || cameraPositions == null || cameraPositions.Length == 0 || cameraPositions[0] == null)
+        {
+            return Quaternion.identity;
+        }
+
+        Transform anchor = cameraPositions[0];
+        Quaternion level = Quaternion.Euler(0f, YawOf(anchor), 0f);
+        Quaternion toLevel = Quaternion.Inverse(anchor.rotation) * level;
+        return Quaternion.Slerp(Quaternion.identity, toLevel, fpvHorizonStabilization);
+    }
+
+    /// <summary>
+    /// 記錄第三人稱錨點相對於無人機「航向」的偏移，之後鏡頭只跟隨航向，不跟隨俯仰/橫滾
+    /// </summary>
+    private void CaptureThirdPersonOffset()
+    {
+        if (cameraPositions == null || cameraPositions.Length < 2 || cameraPositions[1] == null)
+        {
+            return;
+        }
+
+        Transform anchor = cameraPositions[1];
+        float droneYaw = YawOf(transform);
+        Quaternion inverseYaw = Quaternion.Inverse(Quaternion.Euler(0f, droneYaw, 0f));
+
+        tpvLocalOffset = inverseYaw * (anchor.position - transform.position);
+
+        // 只保留錨點本身的俯角與相對航向，去除生成當下機身可能的橫滾
+        Vector3 localForward = inverseYaw * anchor.forward;
+        tpvLocalRotation = Quaternion.LookRotation(localForward, Vector3.up);
+        tpvSmoothedYaw = droneYaw;
+        tpvOffsetCaptured = true;
+    }
+
+    private Transform GetOrCreateThirdPersonRig()
+    {
+        if (tpvRig == null)
+        {
+            tpvRig = new GameObject($"{name}_TPV_StabilizedRig").transform;
+            tpvSmoothedYaw = YawOf(transform);
+            UpdateStabilizedThirdPersonRig(0f);
+        }
+
+        return tpvRig;
+    }
+
+    private void UpdateStabilizedThirdPersonRig(float dt)
+    {
+        if (tpvRig == null || !tpvOffsetCaptured)
+        {
+            return;
+        }
+
+        float yawBlend = dt > 0f ? 1f - Mathf.Exp(-tpvYawSharpness * dt) : 1f;
+        tpvSmoothedYaw = Mathf.LerpAngle(tpvSmoothedYaw, YawOf(transform), yawBlend);
+
+        Quaternion yawRotation = Quaternion.Euler(0f, tpvSmoothedYaw, 0f);
+        Vector3 targetPosition = transform.position + yawRotation * tpvLocalOffset;
+
+        float positionBlend = dt > 0f ? 1f - Mathf.Exp(-tpvPositionSharpness * dt) : 1f;
+        tpvRig.position = Vector3.Lerp(tpvRig.position, targetPosition, positionBlend);
+        tpvRig.rotation = yawRotation * tpvLocalRotation;
+    }
+
+    // 碰撞防吸附判斷：收集非地面接觸的法線，於 FixedUpdate 中統一處理
+    private void OnCollisionStay(Collision collision)
+    {
+        if (IsOwnCollider(collision.collider)) return;
+
+        int count = collision.contactCount;
+        for (int i = 0; i < count; i++)
+        {
+            Vector3 normal = collision.GetContact(i).normal;
+            if (normal.y > groundNormalThreshold) continue; // 地面/屋頂，正常降落
+
+            accumulatedWallNormal += normal;
+            wallContactCount++;
+        }
+    }
+
+    private void OnCollisionEnter(Collision collision)
+    {
+        if (IsOwnCollider(collision.collider)) return;
+
+        float impactSpeed = collision.relativeVelocity.magnitude;
+        if (impactSpeed > 1.5f)
+        {
+            OnCrash?.Invoke(impactSpeed);
+            Vector3 impactPoint = collision.contactCount > 0 ? collision.GetContact(0).point : transform.position;
+            GameAudio.PlayAt(GameSfx.Crash, impactPoint, Mathf.Clamp01(impactSpeed / 10f));
+        }
+
+        OnCollisionStay(collision);
+    }
+
+    private bool IsOwnCollider(Collider other)
+    {
+        return other == null || other.transform.IsChildOf(transform) || other.attachedRigidbody == rb;
+    }
+
+    /// <summary>
+    /// 防吸附核心：移除朝牆內的速度分量、施加外推力並抑制碰撞造成的亂轉
+    /// </summary>
+    private void ResolveWallContact()
+    {
+        if (accumulatedWallNormal.sqrMagnitude < 0.0001f) return;
+
+        Vector3 wallNormal = accumulatedWallNormal.normalized;
+        Vector3 velocity = rb.linearVelocity;
+        float intoWall = Vector3.Dot(velocity, wallNormal);
+        if (intoWall < 0f)
+        {
+            velocity -= wallNormal * intoWall * (1f + wallBounce);
+            rb.linearVelocity = velocity;
+        }
+
+        rb.AddForce(wallNormal * wallPushOut, ForceMode.Acceleration);
+        rb.angularVelocity *= 0.85f;
     }
 
     private void UpdateGroundedState()
     {
         bool hitGround = false;
         Ray ray = new Ray(transform.position + Vector3.up * 0.1f, Vector3.down);
-        RaycastHit[] hits = Physics.RaycastAll(ray, 0.35f);
+        RaycastHit[] hits = Physics.RaycastAll(ray, 0.35f, ~0, QueryTriggerInteraction.Ignore);
 
         foreach (var h in hits)
         {
@@ -320,7 +575,55 @@ public class DroneController1 : MonoBehaviour
             }
         }
         isGrounded = hitGround;
-        if (isGrounded) isTouchingWall = false;
+    }
+
+    private void UpdateAltitudeAboveGround()
+    {
+        altitudeAboveGround = -1f;
+        RaycastHit[] hits = Physics.RaycastAll(transform.position, Vector3.down, 200f, ~0, QueryTriggerInteraction.Ignore);
+        float closest = float.PositiveInfinity;
+        foreach (RaycastHit hit in hits)
+        {
+            if (hit.collider.transform.IsChildOf(transform) || hit.distance >= closest) continue;
+            closest = hit.distance;
+        }
+
+        if (!float.IsPositiveInfinity(closest))
+        {
+            altitudeAboveGround = closest;
+        }
+    }
+
+    private void UpdateBattery()
+    {
+        if (!isArmed || batteryHoverSeconds <= 0f) return;
+
+        // 懸停約耗用 40% 推力，耗電與推力成正比
+        float hoverRatio = maxThrust > 0f ? Mathf.Abs(Physics.gravity.y) / maxThrust : 0.25f;
+        float load = isGrounded ? 0.1f : Mathf.Max(Throttle01, 0.05f) / Mathf.Max(hoverRatio, 0.05f);
+        batteryPercent = Mathf.Max(0f, batteryPercent - load * 100f / batteryHoverSeconds * Time.deltaTime);
+    }
+
+    public void RechargeBattery()
+    {
+        batteryPercent = 100f;
+    }
+
+    private static float YawOf(Transform target)
+    {
+        Vector3 flatForward = Vector3.ProjectOnPlane(target.forward, Vector3.up);
+        if (flatForward.sqrMagnitude < 0.0001f)
+        {
+            // 機頭垂直朝上/下時，改用機身上方向推算航向
+            flatForward = Vector3.ProjectOnPlane(-target.up * Mathf.Sign(target.forward.y), Vector3.up);
+        }
+        return Quaternion.LookRotation(flatForward.normalized, Vector3.up).eulerAngles.y;
+    }
+
+    private static float NormalizeAngle(float angle)
+    {
+        angle %= 360f;
+        return angle > 180f ? angle - 360f : angle;
     }
 
     private void HandleArmingState()
@@ -365,8 +668,11 @@ public class DroneController1 : MonoBehaviour
 
     private void ApplyFlightPhysics()
     {
-        targetYawAngle += stickYaw * maxYawRate * Time.fixedDeltaTime;
+        float fixedDt = Time.fixedDeltaTime;
+        currentYawRate = Mathf.MoveTowards(currentYawRate, stickYaw * maxYawRate, yawAcceleration * fixedDt);
+        targetYawAngle += currentYawRate * fixedDt;
         float payloadSpeedMultiplier = 1f / (1f + payloadMass / Mathf.Max(baseMass, 0.1f));
+        float agility = Mathf.Lerp(1f, payloadSpeedMultiplier, payloadAgilityLoss);
 
         float invertMultiplier = isInverted ? -1f : 1f;
 
@@ -389,9 +695,13 @@ public class DroneController1 : MonoBehaviour
         errorRotation.ToAngleAxis(out float angle, out Vector3 axis);
         if (angle > 180f) angle -= 360f;
 
-        Vector3 correctionTorque = (axis.normalized * (angle * stabilizerStrength * Mathf.Deg2Rad)) - (rb.angularVelocity * 0.8f);
-        rb.AddTorque(correctionTorque, ForceMode.Acceleration);
-        rb.AddTorque(correctionTorque, ForceMode.Acceleration);
+        // PD 姿態控制 (原本重複呼叫兩次 AddTorque，改由 attitudeGain = 2 表達相同強度)
+        if (float.IsNaN(axis.x) || axis.sqrMagnitude < 0.0001f)
+        {
+            axis = Vector3.zero;
+        }
+        Vector3 correctionTorque = (axis.normalized * (angle * stabilizerStrength * agility * Mathf.Deg2Rad)) - (rb.angularVelocity * attitudeDamping);
+        rb.AddTorque(correctionTorque * attitudeGain, ForceMode.Acceleration);
 
         float gravityForce = Mathf.Abs(Physics.gravity.y);
         float tiltAngle = Vector3.Angle(Vector3.up, transform.up);
@@ -416,13 +726,33 @@ public class DroneController1 : MonoBehaviour
             }
         }
 
-        rb.AddForce(transform.up * finalThrust, ForceMode.Acceleration);
+        lastThrustAcceleration = finalThrust;
 
-        // 撞牆時停用水平推進力，防止強行擠壓貼牆
-        if (!isTouchingWall)
+        Vector3 horizontalDirection = new Vector3(transform.up.x, 0, transform.up.z);
+        Vector3 propulsion = transform.up * finalThrust
+                             + horizontalDirection * horizontalSpeedBoost * payloadSpeedMultiplier;
+
+        // 撞牆時只移除「朝牆內」的推力分量，仍可沿牆滑開或後退脫離，不會被推力壓在牆上
+        if (isTouchingWall && accumulatedWallNormal.sqrMagnitude > 0.0001f)
         {
-            Vector3 horizontalDirection = new Vector3(transform.up.x, 0, transform.up.z);
-            rb.AddForce(horizontalDirection * horizontalSpeedBoost * payloadSpeedMultiplier, ForceMode.Acceleration);
+            Vector3 wallNormal = accumulatedWallNormal.normalized;
+            float intoWall = Vector3.Dot(propulsion, wallNormal);
+            if (intoWall < 0f)
+            {
+                propulsion -= wallNormal * intoWall;
+            }
+        }
+
+        rb.AddForce(propulsion, ForceMode.Acceleration);
+
+        if (!isGrounded && turbulenceStrength > 0f)
+        {
+            float t = Time.time * 0.6f;
+            Vector3 gust = new Vector3(
+                Mathf.PerlinNoise(turbulenceSeed, t) - 0.5f,
+                (Mathf.PerlinNoise(turbulenceSeed + 31f, t) - 0.5f) * 0.4f,
+                Mathf.PerlinNoise(turbulenceSeed + 67f, t) - 0.5f);
+            rb.AddForce(gust * (2f * turbulenceStrength), ForceMode.Acceleration);
         }
     }
 
@@ -436,7 +766,9 @@ public class DroneController1 : MonoBehaviour
     {
         if (engineAudioSource == null) return;
 
-        engineAudioSource.pitch = 1.0f;
+        // 引擎音高隨螺旋槳轉速變化，增加臨場感
+        float rpm01 = propMaxRPM > 0f ? Mathf.Clamp01(currentVisualRpm / propMaxRPM) : 0f;
+        engineAudioSource.pitch = Mathf.Lerp(0.8f, 1.3f, rpm01);
 
         if (!isArmed)
         {
@@ -450,7 +782,8 @@ public class DroneController1 : MonoBehaviour
             engineAudioSource.Play();
         }
 
-        if (!wasGroundedLastFrame && !isGrounded && rb.linearVelocity.y > 0.5f)
+        // 只在「離地的那一幀」播放起飛音效 (原條件在爬升期間每幀都成立)
+        if (wasGroundedLastFrame && !isGrounded && rb.linearVelocity.y > 0.1f)
         {
             if (takeoffSound) engineAudioSource.PlayOneShot(takeoffSound, engineVolume);
         }
@@ -544,6 +877,12 @@ public class DroneController1 : MonoBehaviour
         Transform targetPos = cameraPositions[currentCameraIndex];
         if (targetPos != null)
         {
+            // 第三人稱改掛在只跟隨航向的穩定支架上，避免鏡頭隨機身傾斜造成暈眩
+            if (currentCameraIndex != 0 && stabilizeThirdPersonCamera && tpvOffsetCaptured)
+            {
+                targetPos = GetOrCreateThirdPersonRig();
+            }
+
             // 1. 移動 XR Origin 到指定鏡頭位置
             xrOriginTransform.SetParent(targetPos);
             xrOriginTransform.localPosition = Vector3.zero;
@@ -800,13 +1139,19 @@ public class DroneController1 : MonoBehaviour
         // 清除殘留的物理速度
         rb.linearVelocity = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
-        
+
         // 重置內部輸入數值
         stickPitch = 0f;
         stickRoll = 0f;
         stickYaw = 0f;
-        
+        currentYawRate = 0f;
+        accumulatedWallNormal = Vector3.zero;
+        wallContactCount = 0;
+        isTouchingWall = false;
+
         // 對齊物理目標方向
-        targetYawAngle = flatYaw; 
+        targetYawAngle = flatYaw;
+        tpvSmoothedYaw = flatYaw;
+        if (tpvRig != null) UpdateStabilizedThirdPersonRig(0f);
     }
 }

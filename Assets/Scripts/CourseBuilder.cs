@@ -19,6 +19,13 @@ public class CourseBuilder : MonoBehaviour
     void Start()
     {
         BuildCourse();
+
+        // 讓 GameManager 的總檢查點數與實際生成數量一致，並把第一個圈設為導航目標
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.totalCheckpoints = checkpointCount;
+        }
+        RingTrigger.SetNavigationTo(0);
     }
 
     void BuildCourse()
@@ -117,11 +124,16 @@ public class CourseBuilder : MonoBehaviour
 
     void CreateCheckpointRing(Vector3 pos, int index)
     {
+        CreateCheckpointRing(pos, index, Quaternion.identity, 3.5f);
+    }
+
+    /// <summary>建立一個檢查圈 (亦供程序化城市賽道使用)，rotation 決定圈面朝向</summary>
+    public static GameObject CreateCheckpointRing(Vector3 pos, int index, Quaternion rotation, float radius)
+    {
         GameObject ringParent = new GameObject("Checkpoint_" + index);
         ringParent.transform.position = pos;
 
         int segments = 12;
-        float radius = 3.5f;
 
         for (int i = 0; i < segments; i++)
         {
@@ -145,6 +157,9 @@ public class CourseBuilder : MonoBehaviour
         // 掛載動態判定組件並綁定編號
         RingTrigger trigger = ringParent.AddComponent<RingTrigger>();
         trigger.checkpointIndex = index;
+
+        ringParent.transform.rotation = rotation;
+        return ringParent;
     }
 
     void CreateTree(Vector3 pos)
@@ -207,20 +222,33 @@ public class RingTrigger : MonoBehaviour
                 SetColor(Color.green);
 
                 // 2. 通知 GameManager 更新進度與最新重生點
-                GameManager.Instance.CheckpointPassed(checkpointIndex);
+                GameManager.Instance.CheckpointPassed(checkpointIndex, transform);
 
-                // 3. 搜尋並將下一個目標檢查點改為黃色高亮
-                RingTrigger[] allTriggers = FindObjectsByType<RingTrigger>(FindObjectsSortMode.None);
-                foreach (RingTrigger trigger in allTriggers)
+                // 3. 搜尋並將下一個目標檢查點改為黃色高亮，並更新 HUD 導航
+                RingTrigger next = SetNavigationTo(checkpointIndex + 1);
+                if (next != null)
                 {
-                    if (trigger.checkpointIndex == checkpointIndex + 1)
-                    {
-                        trigger.SetColor(Color.yellow);
-                        break;
-                    }
+                    next.SetColor(Color.yellow);
                 }
             }
         }
+    }
+
+    /// <summary>把 HUD 導航目標設為指定編號的檢查圈，找不到則清除</summary>
+    public static RingTrigger SetNavigationTo(int index)
+    {
+        RingTrigger[] allTriggers = FindObjectsByType<RingTrigger>(FindObjectsSortMode.None);
+        foreach (RingTrigger trigger in allTriggers)
+        {
+            if (trigger.checkpointIndex == index)
+            {
+                NavigationTarget.Set(trigger.transform.position, $"CP {index + 1}/{allTriggers.Length}", Color.yellow);
+                return trigger;
+            }
+        }
+
+        NavigationTarget.Clear();
+        return null;
     }
 
     public void SetColor(Color newColor)

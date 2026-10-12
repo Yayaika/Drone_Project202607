@@ -74,7 +74,7 @@ public class CheckpointRing : MonoBehaviour
             GameManager gm = FindFirstObjectByType<GameManager>();
             if (gm != null)
             {
-                gm.CheckpointPassed(checkpointIndex);
+                gm.CheckpointPassed(checkpointIndex, transform);
             }
         }
     }

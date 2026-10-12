@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+using DG.Tweening;
+using UnityEngine;
 
 // 預設必須的原件
 [RequireComponent(typeof(CanvasGroup))]
@@ -25,10 +26,25 @@ public class UIPanelCtrl : MonoBehaviour
 
     [Tooltip("UI面板預設是否開啓")]
     public bool openOnAwake;
-    
+
+    [Header("DOTween 動畫")]
+    [Tooltip("開關面板時是否播放縮放/淡入淡出動畫")]
+    public bool animate = true;
+    [Tooltip("開啟時從多小的縮放比例彈出")]
+    [Range(0.5f, 1f)]
+    public float popFromScale = 0.85f;
+    [Tooltip("開啟後子物件是否依序淡入")]
+    public bool staggerChildren = true;
+
+    private bool initialized;
+
+    public bool IsOpen { get; private set; }
+
     void Start()
     {
-        Switch(openOnAwake);
+        // 初始狀態直接套用，不播放動畫
+        SetInstant(openOnAwake);
+        initialized = true;
     }
 
     /// <summary>
@@ -37,7 +53,43 @@ public class UIPanelCtrl : MonoBehaviour
     /// <param name="B">true 開 / false 関</param>
     public void Switch(bool B)
     {
-        canvasGroup.alpha = B ? 1 : 0;
-        canvasGroup.blocksRaycasts = B;
+        if (!animate || !initialized || !Application.isPlaying)
+        {
+            SetInstant(B);
+            return;
+        }
+
+        IsOpen = B;
+        if (B)
+        {
+            UITween.ShowPanel(canvasGroup, UITween.DefaultDuration, popFromScale);
+            // 有 LayoutGroup 時子物件位置由版面控制，不做位移動畫
+            if (staggerChildren && GetComponent<UnityEngine.UI.LayoutGroup>() == null)
+            {
+                UITween.StaggerIn(transform, 0.05f, -15f);
+            }
+            GameAudio.Play(GameSfx.PanelOpen, 0.7f);
+        }
+        else
+        {
+            UITween.HidePanel(canvasGroup);
+        }
+    }
+
+    /// <summary>切換目前開關狀態 (可直接綁在按鈕 OnClick)</summary>
+    public void Toggle()
+    {
+        Switch(!IsOpen);
+    }
+
+    private void SetInstant(bool open)
+    {
+        IsOpen = open;
+        canvasGroup.DOKill();
+        transform.DOKill();
+        transform.localScale = Vector3.one;
+        canvasGroup.alpha = open ? 1 : 0;
+        canvasGroup.blocksRaycasts = open;
+        canvasGroup.interactable = open;
     }
 }

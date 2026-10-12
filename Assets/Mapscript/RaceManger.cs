@@ -95,6 +95,13 @@ public class RaceManager : MonoBehaviour
         // 遊戲開始時，先將圓圈放到第一個點 (t=0)
         UpdateGatePosition();
         isRacing = true;
+
+        // 讓 GameManager 負責倒數、計時、結算；總檢查點 = 本賽道的通過點數
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.totalCheckpoints = totalWaypoints;
+            GameManager.Instance.passedCheckpoints = 0;
+        }
     }
 
     // 安全機制，關閉時取消監聽
@@ -184,6 +191,11 @@ public class RaceManager : MonoBehaviour
         }
         currentIndex++;
 
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.CheckpointPassed(currentIndex - 1);
+        }
+
         if (currentIndex < totalWaypoints)
         {
             UpdateGatePosition();
@@ -193,7 +205,8 @@ public class RaceManager : MonoBehaviour
         {
             gateInstance.SetActive(false); 
             isRacing = false;            
-            Debug.Log($"比賽結束！最終時間: {timerText.text}");
+            NavigationTarget.Clear();
+            Debug.Log("比賽結束！");
         }
     }
 
@@ -214,6 +227,8 @@ public class RaceManager : MonoBehaviour
         // 🌟 4. 關鍵修復：必須使用 localPosition 才能讓圓圈精準對齊賽道，不會飛到地圖外！
         gateInstance.transform.localPosition = localPos;
         gateInstance.transform.localRotation = Quaternion.LookRotation(localTangent, localUp);
+
+        NavigationTarget.Set(gateInstance.transform.position, $"GATE {currentIndex + 1}/{totalWaypoints}", Color.yellow);
     }
 
     // === 重生邏輯 ===

@@ -15,8 +15,8 @@ public class OptionsMenu : MonoBehaviour
             Time.timeScale = isOpen ? 0f : 1f;
         }
 
-        // 按下 R 鍵快捷重新開始
-        if (Input.GetKeyDown(KeyCode.R))
+        // 按下 F5 快捷重新開始 (R 鍵保留給無人機「回到最後檢查點」，避免同時觸發整個場景重載)
+        if (Input.GetKeyDown(KeyCode.F5))
         {
             RestartGame();
         }
@@ -40,8 +40,8 @@ public class OptionsMenu : MonoBehaviour
             alignment = TextAnchor.MiddleCenter
         });
 
-        // 右下角 RESTART (R) 快捷按鈕 (保留)
-        if (GUI.Button(new Rect(Screen.width - 130, Screen.height - 55, 120, 40), "RESTART (R)"))
+        // 右下角 RESTART (F5) 快捷按鈕 (保留)
+        if (GUI.Button(new Rect(Screen.width - 130, Screen.height - 55, 120, 40), "RESTART (F5)"))
         {
             RestartGame();
         }

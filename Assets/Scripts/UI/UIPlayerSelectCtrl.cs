@@ -43,6 +43,7 @@ public class UIPlayerSelectCtrl : MonoBehaviour
         // 初始時先關閉所有無人機腳本
         DisableAllDroneScripts();
         UpdateInfo();
+        GameAudio.PlayMusic(GameMusic.Menu);
     }
 
     /// <summary>
@@ -128,7 +129,10 @@ public class UIPlayerSelectCtrl : MonoBehaviour
     {
         _playerDB.selectedIndex = index;
         GameManager1.playerIndex = index;
-        GameManager1.LoadScene("SampleScene");
+
+        // 進入關卡前先選擇遊戲模式 (競速 / 搬運) 與關卡
+        Canvas canvas = _textName != null ? _textName.canvas : FindFirstObjectByType<Canvas>();
+        ModeSelectPanel.Open(canvas, _textName != null ? _textName.font : null);
     }
 
     public void NextDrone()
