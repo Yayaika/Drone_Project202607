@@ -2,7 +2,7 @@
 
 ## 最後更新
 
-- 日期：2026-10-12
+- 日期：2026-10-13
 - 更新者：Claude（AI 輔助）
 - 可信度：程式碼層級已盤點並以命令列編譯驗證；**尚未在 Unity Play Mode 實測**
 
@@ -30,6 +30,14 @@
 | 結算畫面與排行榜 | 部分完成（待實測） | `UI/ResultScreen.cs`、`Gameplay/LeaderboardStore.cs`（本機 PlayerPrefs） | 玩家名稱輸入（目前自動以無人機名稱命名） |
 | 模式/關卡選擇面板 | 部分完成（待實測） | `UI/ModeSelectPanel.cs`、`UIPlayerSelectCtrl.EnterStage` | — |
 | DOTween UI 動態 | 部分完成（待實測） | `UI/UIButtonTweenFx.cs`（自動掛到所有 Button）、`UI/UITween.cs`、`UIPanelCtrl.cs` | — |
+| 晝夜天氣系統 | 部分完成（住宅區截圖確認正午/黃昏/夜晚/雨/暴風雨/濃霧，風力數值正確） | `Gameplay/EnvironmentController.cs` | 實際飛行手感、VR 中提示文字與雨景待測；無濕路面與雷聲 |
+| 台北式街區與 Anime Nature 植物 | 部分完成（住宅區/市中心/訓練場截圖確認；City2 只確認執行無錯誤） | `CityGenerator.TaiwanStreets.cs`、`Editor/VegetationSetup.cs` | 植物為動畫風格；City2 灌木位置未逐一目視 |
+| 選單場景背景與 Loading 畫面 | 部分完成（Play 模式截圖確認：開始選單城市背景/巡航無人機、選擇場景屋頂展示台、Loading 進度與淡出） | `UI/MenuSceneDecor.cs`、`Gameplay/SceneLoader.cs`、`Editor/MenuSceneSetup.cs` | VR 頭顯實機未測 |
+| 固定關卡（烘焙） | 部分完成（CityResidential 已截圖確認；CityDowntown 已烘焙未逐段截圖） | `Editor/CityLevelBaker.cs`、`Scenes/CityResidential.unity`、`Scenes/CityDowntown.unity` | 重新執行選單 7 會覆蓋手動修改 |
+| 競速障礙物 | 部分完成（住宅區 5 段截圖確認天橋/電線/布條/塔吊/門架） | `CityGenerator.TaiwanStreets.cs`（BuildRaceObstacles） | 難度與碰撞需實際飛行調整 |
+| 台灣街景（CityProcedural） | 部分完成（已在 Play 模式生成並截圖確認；未實際飛行遊玩） | `Level/CityGenerator.TaiwanStreets.cs`、`CityMeshBuilder.cs`（D-013） | 需在 Editor 生成後確認比例、招牌文字、材質與效能 |
+| 車流與紅綠燈 | 部分完成（Play 模式截圖確認：車頭方向正確、靠右行駛、跟車與停等正常） | `Level/CityTraffic.cs`（只用 Awbmecreations 車輛素材，無機車素材） | `CityProcedural.unity` 已填入 7 款車輛；長時間是否塞車/卡死待觀察 |
+| 路人 | 部分完成（Play 模式截圖確認行走動畫與過馬路；已填入 8 款 CityPeople） | `Level/CityPedestrians.cs`（CityPeople 已移至 `Assets/Download/DenysAlmaral/`） | 動畫與步速是否吻合待確認 |
 | 程序化城市/新關卡 | 部分完成（建築已修正並於 Play 模式確認） | `Level/CityGenerator.cs`、`Editor/DroneGameSetupMenu.cs`、`LevelCatalog.cs`（住宅區/市中心兩關） | 道路為純色 placeholder；從 StartMenu 完整流程未重測 |
 | 有機城市生成器（獨立測試） | 部分完成（已在 Editor 生成並截圖確認、Play 中重建可用） | `Level/OrganicCityGenerator.cs`、`Level/OrganicCityFlyCamera.cs`、`Editor/OrganicCityGeneratorEditor.cs`、`Scenes/OrganicCityTest.unity`、`Materials/OrganicCity/` | 未接入關卡/玩法；建築已改用 POLYGON city pack 模型（放不下時少量方塊大樓補空）；街道設施與樹木使用 LowpolyStreetPack（規則可在 Inspector 新增）；中央圓環預設關閉；鍵盤操作未經實機按鍵測試 |
 | 面板（設置/操作說明/介紹） | 部分完成（待實測） | `UI/PanelEnhancer.cs`、`UI/ControlsHelp.cs`、`UI/UIPopupPanel.cs`：彈出動畫、按鍵圖示操作說明、音量百分比、返回選單、依模式顯示過關目標 | 版面需在畫面上確認 |
@@ -49,6 +57,7 @@
 
 ## 4. 最近完成的工作
 
+- 2026-10-13：CityProcedural 台灣街景、車流（汽車/紅綠燈）、路人（待 Unity 實測）
 - 2026-10-12：飛控手感、防吸附、TPV 穩定鏡頭、擬真 OSD、搬運優化、模式/關卡選擇、倒數/結算/排行、搬運任務、音效服務、程序化城市與兩個新關卡、DOTween UI（皆待實測）
 
 ## 5. 目前正在進行的工作
@@ -66,5 +75,8 @@
 
 | 日期 | 檢查項目 | 結果 | 限制／備註 |
 |---|---|---|---|
+| 2026-10-14 | Editor 內連續載入 5 個場景（SceneLoader 計時） | 讀取約 0.9–1.4s（含 0.9s 最短顯示）；啟用 0.65–2.2s；市中心固定場景啟用比執行時生成快 | Editor 內數據受 Editor/MCP 負載影響，兩輪差異大；建置版效能待測 |
+| 2026-10-13 | Unity Play Mode（CityProcedural，4×4 街區） | 無新錯誤；48 輛車、64 位路人、停車場正常 | Editor 內 CPU 約 42–54ms/幀（關閉城市時約 23ms，含 Editor 與 MCP 開銷），建置版效能待測；Console 中 XRDeviceSimulatorUI 的 NullReference 與無人機 LED 負縮放碰撞體警告為既有問題 |
+| 2026-10-13 | dotnet 編譯 Assembly-CSharp / Assembly-CSharp-Editor（含新增 4 個檔案） | 0 錯誤、無新增警告 | Unity Editor 當時未回應 MCP（逾時），Editor.log 仍顯示寫檔途中的舊錯誤 `CityGrid` 找不到，需切回 Unity 重新編譯 |
 | 2026-10-12 | dotnet 編譯 Assembly-CSharp / Assembly-CSharp-Editor（使用 Unity 產生的參考） | 0 錯誤 | 非 Unity 內編譯；未進入 Play Mode |
 | 2026-10-12 | Unity Editor.log | 曾出現 CS0246（匯入時序），已處理 | 需使用者切回 Unity 後確認 Console |

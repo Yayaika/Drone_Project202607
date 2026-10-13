@@ -17,6 +17,13 @@ public static class DroneGameSetupMenu
     private const string CityPackRoot = "Assets/Download/POLYGON city pack/Meshes,textures";
     private const string CargoPrefabPath = "Assets/Prefabs/Drone_Cargo_RedCube.prefab";
     private const string AudioFolder = "Assets/Resources/Audio";
+    private const string CarPackFolder = "Assets/Download/Awbmecreations/Mobile Optimize-Free Low Poly Cars/Prefabs";
+    private const string CityPeopleFolderName = "CityPeople";
+
+    /// <summary>街頭不合理的車輛 (飛機、軍車、怪獸卡車)</summary>
+    private static readonly string[] ExcludedVehicleKeywords = { "plane", "military", "monster" };
+    /// <summary>使用特殊動畫控制器 (施工、義肢) 或只是道具的 CityPeople 資料夾</summary>
+    private static readonly string[] ExcludedPeopleKeywords = { "/props/", "/tools/", "/disabilities/", "constructor" };
 
     [MenuItem("無人機遊戲/1. 建立程序化城市關卡場景 (CityProcedural)", priority = 1)]
     public static void CreateProceduralCityScene()
@@ -142,6 +149,61 @@ public static class DroneGameSetupMenu
             "確定");
     }
 
+    [MenuItem("無人機遊戲/5. 套用台灣街景車輛與路人到目前場景的 CityGenerator", priority = 5)]
+    public static void AssignCityLifeToOpenScene()
+    {
+        CityGenerator[] generators = Object.FindObjectsByType<CityGenerator>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        if (generators.Length == 0)
+        {
+            EditorUtility.DisplayDialog("找不到 CityGenerator", "請先開啟 CityProcedural 場景。", "確定");
+            return;
+        }
+
+        foreach (CityGenerator generator in generators)
+        {
+            SerializedObject serialized = new SerializedObject(generator);
+            AssignCityLife(serialized);
+            serialized.ApplyModifiedProperties();
+            EditorSceneManager.MarkSceneDirty(generator.gameObject.scene);
+        }
+        EditorUtility.DisplayDialog("完成", "已填入車輛與路人模型，請儲存場景。", "確定");
+    }
+
+    /// <summary>台灣街景的車流 (低多邊形汽車) 與路人 (CityPeople) 模型</summary>
+    private static void AssignCityLife(SerializedObject serialized)
+    {
+        GameObject[] vehicles = LoadPrefabs(CarPackFolder)
+            .Where(prefab => !ExcludedVehicleKeywords.Any(keyword => prefab.name.ToLowerInvariant().Contains(keyword)))
+            .ToArray();
+
+        string peopleFolder = AssetDatabase.FindAssets(CityPeopleFolderName + " t:Folder")
+            .Select(AssetDatabase.GUIDToAssetPath)
+            .FirstOrDefault(path => Path.GetFileName(path) == CityPeopleFolderName);
+        GameObject[] people = peopleFolder == null
+            ? new GameObject[0]
+            : AssetDatabase.FindAssets("t:Prefab", new[] { peopleFolder + "/Prefabs" })
+                .Select(AssetDatabase.GUIDToAssetPath)
+                .Where(path => !ExcludedPeopleKeywords.Any(keyword => path.ToLowerInvariant().Contains(keyword)))
+                .Select(AssetDatabase.LoadAssetAtPath<GameObject>)
+                .Where(prefab => prefab != null && prefab.GetComponentInChildren<Animator>() != null)
+                .ToArray();
+
+        SetArray(serialized.FindProperty("vehiclePrefabs"), vehicles);
+        SetArray(serialized.FindProperty("pedestrianPrefabs"), people);
+        Debug.Log($"[DroneGameSetup] 台灣街景：車輛 {vehicles.Length}、路人 {people.Length}");
+    }
+
+    private static GameObject[] LoadPrefabs(string folder)
+    {
+        if (!AssetDatabase.IsValidFolder(folder)) return new GameObject[0];
+
+        return AssetDatabase.FindAssets("t:Prefab", new[] { folder })
+            .Select(AssetDatabase.GUIDToAssetPath)
+            .Select(AssetDatabase.LoadAssetAtPath<GameObject>)
+            .Where(prefab => prefab != null && prefab.GetComponentInChildren<Renderer>() != null)
+            .ToArray();
+    }
+
     private static void AssignCityAssets(CityGenerator generator)
     {
         SerializedObject serialized = new SerializedObject(generator);
@@ -158,10 +220,12 @@ public static class DroneGameSetupMenu
 
         // 素材包 FBX 匯入後材質皆為灰色：填入素材包的牆面/屋頂/窗戶配色與招牌貼圖
         PolygonCityPackAssets.AssignPalette(serialized, buildings.Concat(shops).Concat(props));
+        AssignCityLife(serialized);
 
         GameObject cargo = AssetDatabase.LoadAssetAtPath<GameObject>(CargoPrefabPath);
         serialized.FindProperty("cargoPrefab").objectReferenceValue = cargo;
         serialized.ApplyModifiedPropertiesWithoutUndo();
+        CityLevelBaker.AssignStreetAssets(generator);
 
         Debug.Log($"[DroneGameSetup] CityGenerator 素材：大樓 {buildings.Length}、商店 {shops.Length}、道具 {props.Length}、貨物 Prefab {(cargo != null ? "OK" : "缺少")}");
     }

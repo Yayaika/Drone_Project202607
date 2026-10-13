@@ -745,6 +745,12 @@ public class DroneController1 : MonoBehaviour
 
         rb.AddForce(propulsion, ForceMode.Acceleration);
 
+        // 天氣風力 (晝夜天氣系統；晴天為零)
+        if (!isGrounded)
+        {
+            rb.AddForce(EnvironmentController.Wind * payloadSpeedMultiplier, ForceMode.Acceleration);
+        }
+
         if (!isGrounded && turbulenceStrength > 0f)
         {
             float t = Time.time * 0.6f;

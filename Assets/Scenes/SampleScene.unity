@@ -859,6 +859,24 @@ MonoBehaviour:
   checkpointCount: 6
   courseLength: 200
   treeCount: 100
+  treePrefabs:
+  - {fileID: 7297178316331195161, guid: e96f939c383e704438188e9d559f1174, type: 3}
+  - {fileID: 3027071335612513534, guid: 23aeb96941b49fb49befd2058dd75b79, type: 3}
+  - {fileID: 8928116012005070631, guid: 4a378afb8de68044f986ae019d0f10ac, type: 3}
+  - {fileID: 4743872952868428288, guid: 1793f6da575996c40bf5fb4686d1743e, type: 3}
+  - {fileID: 1850683538154754212, guid: 59fb3b08193022448b57bc2254794dce, type: 3}
+  - {fileID: 7021812157548635031, guid: d56b774f386e40441bc733dbd13b0a2f, type: 3}
+  - {fileID: 7103450797452625162, guid: 9ac23f469b1f4b5418eb521662fb2eb0, type: 3}
+  bushPrefabs:
+  - {fileID: 213899067198857939, guid: 84da55b25c571db4db84f7cd3c834c76, type: 3}
+  - {fileID: 1301040729513061559, guid: f5a6a30c04f240d47be03c2ef138333d, type: 3}
+  - {fileID: 761838833411285987, guid: c088aefd704587448aabfd00ceb65929, type: 3}
+  - {fileID: 7638104049533072549, guid: aa391514e0dc2554abab38b1dd1ebd23, type: 3}
+  grassPrefabs:
+  - {fileID: 5952913036450062963, guid: 679d87e5054da96449b9a6ee885a0380, type: 3}
+  treeHeightRange: {x: 9, y: 16}
+  bushCount: 40
+  grassCount: 160
   safetyRadius: 12
 --- !u!4 &1528996551
 Transform:

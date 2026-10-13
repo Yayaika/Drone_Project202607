@@ -968,6 +968,33 @@ MonoBehaviour:
   cargoPrefab: {fileID: 3184246940758794210, guid: 42c1e37123b01cc43b3504821efe8fba, type: 3}
   defaultCheckpointCount: 8
   checkpointRadius: 4.5
+  taiwanStreetStyle: 1
+  towerHeightThreshold: 26
+  towerChance: 0.7
+  floorHeight: 3.2
+  arcadeHeight: 3.6
+  arcadeDepth: 3
+  spawnTraffic: 1
+  spawnPedestrians: 1
+  vehiclePrefabs:
+  - {fileID: 3786326439804512758, guid: f4e73d783d681e04ca355f6c8a50af8e, type: 3}
+  - {fileID: 793685457875359081, guid: 9c92406c14c380849bca38280c133c64, type: 3}
+  - {fileID: 745966575250574594, guid: 789bb11bfacf90443892854edcbb02f4, type: 3}
+  - {fileID: 1718881139866272103, guid: d84787863a48b884e8c303159510c801, type: 3}
+  - {fileID: 3859950695711406603, guid: eb1d6cef4963f9948a2d46b477134dfb, type: 3}
+  - {fileID: 2295116759664368373, guid: 69cdbe0692ba4624b9259fb58689f06d, type: 3}
+  - {fileID: 2922220883736789182, guid: 041e4e3100f07184cacfe35dce34f022, type: 3}
+  pedestrianPrefabs:
+  - {fileID: 6584613354768528393, guid: bae26acf817c6dc4e82f95d9ef4ab46a, type: 3}
+  - {fileID: 1616406060653692748, guid: f71041fd118fbb34aa9d2dd6a1d96fce, type: 3}
+  - {fileID: 7501788059647666026, guid: bcc8c8f342f71a7439ac0579aa86f030, type: 3}
+  - {fileID: 913845681951795218, guid: 2435736d6adca23458edd7c80c901e3e, type: 3}
+  - {fileID: 186757882122740016, guid: bcc8732b8b44622449c23934f89e68c0, type: 3}
+  - {fileID: 5986958801767457440, guid: 87a7b985b15a4244091de35d7df9169a, type: 3}
+  - {fileID: 6993270559495516286, guid: 314b13a2c4f89c74299eabc2a4c725c7, type: 3}
+  - {fileID: 5557327951299580288, guid: f0ac6fb9ada49f24683e3eca20786103, type: 3}
+  carsPerLane: 0.3
+  pedestriansPerBlock: 4
 --- !u!4 &2001238632
 Transform:
   m_ObjectHideFlags: 0

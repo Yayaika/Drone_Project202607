@@ -7,12 +7,14 @@ using UnityEngine;
 /// 參數可由 <see cref="LevelCatalog"/> 的關卡設定覆寫 (種子、街區數、密度、最高樓高)。
 /// </summary>
 [DefaultExecutionOrder(-200)] // 需早於 SpawnCtrl.Awake，先把出生點移到廣場
-public class CityGenerator : MonoBehaviour, IDeliverySpotProvider
+public partial class CityGenerator : MonoBehaviour, IDeliverySpotProvider
 {
     private const string RootName = "GeneratedCity";
 
     [Header("生成時機")]
     [SerializeField] private bool generateOnAwake = true;
+    [Tooltip("已在編輯器烘焙成固定場景內容：執行時不再生成，只建立車流/路人與競速檢查點")]
+    [SerializeField] private bool baked;
     [Tooltip("使用關卡目錄的參數 (種子/規模/密度/高度) 覆寫下方設定")]
     [SerializeField] private bool useLevelCatalog = true;
 
@@ -63,15 +65,17 @@ public class CityGenerator : MonoBehaviour, IDeliverySpotProvider
     [SerializeField] private bool addDeliveryManagerInDeliveryMode = true;
     [SerializeField] private GameObject cargoPrefab;
     [SerializeField] private int defaultCheckpointCount = 8;
-    [SerializeField] private float checkpointRadius = 4.5f;
+    [SerializeField] private float checkpointRadius = 3.5f;
 
     private readonly Dictionary<GameObject, PolygonCityModels.Measurement> modelMeasurements =
         new Dictionary<GameObject, PolygonCityModels.Measurement>();
-    private readonly List<Vector3> rooftopSpots = new List<Vector3>();
-    private readonly List<Vector3> streetSpots = new List<Vector3>();
+    // 生成結果 (烘焙後隨場景保存)
+    [SerializeField, HideInInspector] private List<Vector3> rooftopSpots = new List<Vector3>();
+    [SerializeField, HideInInspector] private List<Vector3> streetSpots = new List<Vector3>();
+    [SerializeField, HideInInspector] private List<Vector3> racePath = new List<Vector3>();
+    [SerializeField, HideInInspector] private Vector3 plazaCenter;
     private System.Random random;
     private Transform root;
-    private Vector3 plazaCenter;
     private int plazaBlock;
 
     public IReadOnlyList<Vector3> RooftopSpots => rooftopSpots;
@@ -81,18 +85,29 @@ public class CityGenerator : MonoBehaviour, IDeliverySpotProvider
     private float Pitch => blockSize + roadWidth;
     private float HalfSpan => (blocks * blockSize + (blocks + 1) * roadWidth) * 0.5f;
 
+    public bool IsBaked => baked;
+
     private void Awake()
     {
-        if (generateOnAwake)
+        if (baked)
+        {
+            // 固定場景：內容已存在，只接回參照
+            root = transform.Find(RootName);
+            plazaBlock = blocks / 2;
+            MoveSpawnerToPlaza();
+            if (root != null) SpawnCityLife();
+        }
+        else if (generateOnAwake)
         {
             Generate();
             MoveSpawnerToPlaza();
+            SpawnCityLife();
         }
     }
 
     private void Start()
     {
-        if (!generateOnAwake) return;
+        if (!generateOnAwake && !baked) return;
 
         if (LevelCatalog.SelectedMode == GameModeType.Delivery)
         {
@@ -122,6 +137,8 @@ public class CityGenerator : MonoBehaviour, IDeliverySpotProvider
 
         root = new GameObject(RootName).transform;
         root.SetParent(transform, false);
+        signRoot = null;
+        BeginSurfaces();
 
         BuildGround();
         BuildRoads();
@@ -132,6 +149,11 @@ public class CityGenerator : MonoBehaviour, IDeliverySpotProvider
                 BuildBlock(bx, bz);
             }
         }
+
+        // 競速路線在生成時就決定 (固定)，台灣街景沿路線佈置障礙物
+        ComputeRacePath();
+        if (taiwanStreetStyle) BuildRaceObstacles();
+        EndSurfaces();
 
         Physics.SyncTransforms();
         CollectRooftops();
@@ -170,9 +192,8 @@ public class CityGenerator : MonoBehaviour, IDeliverySpotProvider
     private void BuildGround()
     {
         float size = HalfSpan * 2f + 120f;
-        GameObject ground = CreateBox("Ground", new Vector3(0f, -0.5f, 0f), new Vector3(size, 1f, size),
-            groundMaterial, new Color(0.32f, 0.42f, 0.28f));
-        ground.isStatic = true;
+        CreateSurface("Ground", new Vector3(0f, -0.5f, 0f), new Vector3(size, 1f, size),
+            groundMaterial, new Color(0.32f, 0.42f, 0.28f), 8f);
     }
 
     private void BuildRoads()
@@ -182,13 +203,17 @@ public class CityGenerator : MonoBehaviour, IDeliverySpotProvider
         {
             float offset = -HalfSpan + roadWidth * 0.5f + i * Pitch;
 
-            CreateBox($"Road_X_{i}", new Vector3(0f, 0.01f, offset), new Vector3(span, 0.02f, roadWidth), roadMaterial, new Color(0.18f, 0.18f, 0.2f));
-            CreateBox($"Road_Z_{i}", new Vector3(offset, 0.012f, 0f), new Vector3(roadWidth, 0.02f, span), roadMaterial, new Color(0.18f, 0.18f, 0.2f));
+            CreateSurface($"Road_X_{i}", new Vector3(0f, 0.01f, offset), new Vector3(span, 0.02f, roadWidth), roadMaterial, new Color(0.18f, 0.18f, 0.2f), 6f);
+            CreateSurface($"Road_Z_{i}", new Vector3(offset, 0.012f, 0f), new Vector3(roadWidth, 0.02f, span), roadMaterial, new Color(0.18f, 0.18f, 0.2f), 6f);
+
+            if (taiwanStreetStyle) continue;
 
             // 中央分隔線
             CreateBox($"Line_X_{i}", new Vector3(0f, 0.03f, offset), new Vector3(span, 0.01f, 0.25f), null, new Color(0.95f, 0.8f, 0.2f), false);
             CreateBox($"Line_Z_{i}", new Vector3(offset, 0.032f, 0f), new Vector3(0.25f, 0.01f, span), null, new Color(0.95f, 0.8f, 0.2f), false);
         }
+
+        if (taiwanStreetStyle) BuildTaiwanRoadMarkings();
     }
 
     #endregion
@@ -207,8 +232,8 @@ public class CityGenerator : MonoBehaviour, IDeliverySpotProvider
         Vector3 local = center - transform.position;
         bool isPlaza = bx == plazaBlock && bz == plazaBlock;
 
-        CreateBox($"Sidewalk_{bx}_{bz}", local + new Vector3(0f, sidewalkHeight * 0.5f, 0f),
-            new Vector3(blockSize, sidewalkHeight, blockSize), sidewalkMaterial, new Color(0.62f, 0.62f, 0.6f));
+        CreateSurface($"Sidewalk_{bx}_{bz}", local + new Vector3(0f, sidewalkHeight * 0.5f, 0f),
+            new Vector3(blockSize, sidewalkHeight, blockSize), sidewalkMaterial, new Color(0.62f, 0.62f, 0.6f), 2f);
 
         // 街角人行道作為取貨點候選
         float corner = blockSize * 0.5f - 2.5f;
@@ -221,10 +246,18 @@ public class CityGenerator : MonoBehaviour, IDeliverySpotProvider
             return;
         }
 
+        float centerFactor = 1f - Mathf.Clamp01(Vector2.Distance(new Vector2(bx, bz), new Vector2(plazaBlock, plazaBlock)) / (blocks * 0.75f));
+        if (taiwanStreetStyle)
+        {
+            // 台北式街區：窄巷 + 騎樓 + 高密度
+            BuildTaiwanBlock(bx, bz, center, centerFactor);
+            return;
+        }
+
         // 每個街區切成 2x2 地塊
         float margin = 2.5f;
         float lotSize = (blockSize - margin * 3f) * 0.5f;
-        float centerFactor = 1f - Mathf.Clamp01(Vector2.Distance(new Vector2(bx, bz), new Vector2(plazaBlock, plazaBlock)) / (blocks * 0.75f));
+        CityMeshBuilder blockMesh = null;
 
         for (int lx = 0; lx < 2; lx++)
         {
@@ -237,7 +270,19 @@ public class CityGenerator : MonoBehaviour, IDeliverySpotProvider
                     float heightBias = Mathf.Lerp(0.15f, 1f, centerFactor);
                     float targetHeight = Mathf.Lerp(minBuildingHeight, maxBuildingHeight, (float)random.NextDouble() * heightBias);
                     Vector3 roadSide = new Vector3(lx == 0 ? -1f : 1f, 0f, lz == 0 ? -1f : 1f);
-                    PlaceBuilding(lotCenter, lotSize, targetHeight, roadSide, centerFactor);
+                    if (blockMesh == null)
+                    {
+                        PlaceBuilding(lotCenter, lotSize, targetHeight, roadSide, centerFactor);
+                    }
+                    else if (!Chance(modelBuildingChance) || !TryPlaceModelBuilding(lotCenter, lotSize, targetHeight, roadSide))
+                    {
+                        // 台灣街景：優先使用素材包建築，放不下或少量變化時改為沿街騎樓街屋
+                        BuildShophouseLot(blockMesh, lotCenter, lotSize, targetHeight, (int)roadSide.x, (int)roadSide.z);
+                    }
+                }
+                else if (blockMesh != null && Chance(parkingLotChance) && BuildParkingLot(blockMesh, lotCenter, lotSize, lx == 0 ? -1 : 1))
+                {
+                    // 台灣街景：空地多為平面停車場
                 }
                 else
                 {
@@ -246,6 +291,8 @@ public class CityGenerator : MonoBehaviour, IDeliverySpotProvider
                 }
             }
         }
+
+        blockMesh?.Build($"Block_{bx}_{bz}_Shophouses", root);
     }
 
     private void BuildPlaza(Vector3 center)
@@ -263,9 +310,47 @@ public class CityGenerator : MonoBehaviour, IDeliverySpotProvider
 
         plazaCenter = center + new Vector3(0f, padTop, 0f);
 
+        if (taiwanStreetStyle)
+        {
+            // 廣場綠地：四角大樹、灌木與草叢 (避開中央起飛平台)
+            float half = (blockSize - 6f) * 0.5f;
+            foreach (Vector2 cornerSign in new[] { new Vector2(-1f, -1f), new Vector2(1f, -1f), new Vector2(1f, 1f), new Vector2(-1f, 1f) })
+            {
+                Vector3 cornerCenter = center + new Vector3(cornerSign.x * half * 0.6f, sidewalkHeight + 0.04f, cornerSign.y * half * 0.6f);
+                DecoratePark(cornerCenter, half * 0.7f, half * 0.7f);
+            }
+        }
+
         // 廣場四周的取貨點
         streetSpots.Add(center + new Vector3(10f, sidewalkHeight + 0.04f, 10f));
         streetSpots.Add(center + new Vector3(-10f, sidewalkHeight + 0.04f, 10f));
+    }
+
+    /// <summary>只使用素材包建築；模型放不進地塊時回傳 false (不建立方塊大樓)</summary>
+    private bool TryPlaceModelBuilding(Vector3 lotCenter, float lotSize, float targetHeight, Vector3 roadSide)
+    {
+        float yaw = Mathf.Abs(roadSide.x) > Mathf.Abs(roadSide.z) ? (roadSide.x > 0 ? 90f : 270f) : (roadSide.z > 0 ? 0f : 180f);
+        if (random.NextDouble() < 0.5) yaw = roadSide.z > 0 ? 0f : 180f;
+
+        bool preferSmall = targetHeight < (minBuildingHeight + maxBuildingHeight) * 0.35f;
+        for (int attempt = 0; attempt < 5; attempt++)
+        {
+            GameObject prefab = PickPrefab(preferSmall && attempt < 3 ? smallBuildingPrefabs : buildingPrefabs)
+                                ?? PickPrefab(buildingPrefabs) ?? PickPrefab(smallBuildingPrefabs);
+            if (prefab == null) return false;
+            GameObject building = CreateModelBuilding(prefab, lotCenter, lotSize, targetHeight, yaw);
+            if (building != null)
+            {
+                SetStaticRecursively(building);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void SetStaticRecursively(GameObject target)
+    {
+        foreach (Transform part in target.GetComponentsInChildren<Transform>(true)) part.gameObject.isStatic = true;
     }
 
     private void PlaceBuilding(Vector3 lotCenter, float lotSize, float targetHeight, Vector3 roadSide, float centerFactor)
@@ -448,21 +533,22 @@ public class CityGenerator : MonoBehaviour, IDeliverySpotProvider
 
     #region 競速路線
 
-    private void BuildRaceCourse()
+    /// <summary>依種子決定競速路線 (路口序列 + 高度)，生成時計算並隨烘焙場景保存</summary>
+    private void ComputeRacePath()
     {
+        racePath.Clear();
         int nodes = blocks + 1;
         // 起點：廣場東北角的路口
         Vector2Int current = new Vector2Int(plazaBlock + 1, plazaBlock + 1);
         Vector2Int direction = new Vector2Int(0, 1);
         HashSet<Vector2Int> visited = new HashSet<Vector2Int> { current };
-        List<Vector3> path = new List<Vector3>();
         System.Random courseRandom = new System.Random(seed * 31 + 7);
 
         int count = Mathf.Max(3, defaultCheckpointCount);
         for (int i = 0; i < count; i++)
         {
             float height = 5f + (float)courseRandom.NextDouble() * 10f;
-            path.Add(IntersectionPosition(current) + Vector3.up * height);
+            racePath.Add(IntersectionPosition(current) + Vector3.up * height);
 
             List<Vector2Int> options = new List<Vector2Int>();
             foreach (Vector2Int step in new[] { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right })
@@ -483,6 +569,12 @@ public class CityGenerator : MonoBehaviour, IDeliverySpotProvider
             current += direction;
             visited.Add(current);
         }
+    }
+
+    private void BuildRaceCourse()
+    {
+        if (racePath.Count == 0) ComputeRacePath();
+        List<Vector3> path = racePath;
 
         for (int i = 0; i < path.Count; i++)
         {

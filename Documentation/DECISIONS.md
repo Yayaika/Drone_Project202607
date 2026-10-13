@@ -113,6 +113,72 @@
 - **影響：** 同一關卡種子的建築挑選與擺放會與修正前不同（隨機序列改變）；道路與競速路線不受影響。
 - **相關檔案：** `Level/CityGenerator.cs`、`Level/PolygonCityModels.cs`、`Level/OrganicCityGenerator.cs`、`Editor/PolygonCityPackAssets.cs`、`Editor/OrganicCityGeneratorEditor.cs`、`Editor/DroneGameSetupMenu.cs`、`Scenes/CityProcedural.unity`
 
+## D-013：關卡城市 (CityProcedural) 改為台灣街景並加入車流與路人
+
+- **日期：** 2026-10-13
+- **狀態：** 已確認（使用者要求「目前可遊玩的城市場景」改成符合現實、類似台灣街道，並有汽車與路人的合理移動）
+- **背景：** 可遊玩的城市關卡是 `CityProcedural`（住宅區、市中心兩關，執行時由 `CityGenerator` 生成）。`City2`（手工城市）與 `OrganicCityTest` 未變動。
+- **決定：**
+  - 保留棋盤路網、街區尺寸、起飛廣場、競速路線與搬運降落點的產生方式，只替換街景內容；`CityGenerator.taiwanStreetStyle` 關閉即恢復舊版。
+  - 道路：雙黃線、車道虛線、斑馬線、停止線、機車停等區、路口紅線、路緣黃線；靠右行駛，每向兩車道（內側 1.5m 直行/左轉、外側 4.4m 直行/右轉）。
+  - 建築：一般地塊改為沿街 L 形連棟街屋（騎樓、鐵窗／陽台／華廈玻璃帶、冷氣機、直立與橫式中文招牌、頂樓女兒牆、水塔、鐵皮加蓋，中庭鐵皮屋，地塊間隙即防火巷）；目標樓高 > 26m 的市中心地塊有 70% 機率仍用素材包大樓。屋頂前半部加入搬運降落點。
+  - 街道設施：路燈、行道樹（住宅區較多）；沒有建築的空地 60% 改為平面停車場（停放車輛同樣使用提供的汽車素材，含收費亭）；兩時相紅綠燈（綠 14s、黃 3s、全紅 1.5s，各路口錯開）與行人燈（剩 5 秒閃爍）。
+  - 車流 `CityTraffic`：**只使用使用者提供的車輛素材**（Awbmecreations 低多邊形車，排除飛機/軍車/怪獸卡車），不自行生成機車模型（專案內沒有機車素材）；跟車距離、紅燈停在停止線、黃燈兩難區判斷、左轉讓對向直行、轉彎禮讓斑馬線行人。運動學剛體，無人機可撞到。
+  - 路人 `CityPedestrians`：CityPeople 模型（排除施工、義肢與道具資料夾），沿人行道繞行、在路口等行人綠燈走斑馬線、偶爾停下；15% 站在店門口。停用素材包隨機動畫腳本（會播放跳舞），改播行走/待機動畫。
+  - 幾何以 `CityMeshBuilder` 合併為每街區少數網格；碰撞體為 BoxCollider。
+- **原因：** 不改變關卡流程與玩法資料的前提下提高真實感；合併網格避免數萬個 GameObject。
+- **替代方案：** NavMesh 路人／車輛（需烘焙且路網為執行時生成，較複雜）；改用 OrganicCityGenerator（未接入關卡）。
+- **影響範圍：** 同一種子的建築與道路裝飾和舊版不同；競速路線不變。招牌文字使用 `YuPearl-Medium SDF`（動態字型）。若日後提供機車素材，可在 `CityTraffic` 加入外側車道機車與路邊停放。
+- **相關檔案：** `Level/CityGenerator.cs`、`Level/CityGenerator.TaiwanStreets.cs`、`Level/CityMeshBuilder.cs`、`Level/CityTraffic.cs`、`Level/CityPedestrians.cs`、`Gameplay/RuntimeMaterials.cs`、`Editor/DroneGameSetupMenu.cs`
+
+## D-014：選單場景動態背景與 Loading 畫面
+
+- **日期：** 2026-10-14
+- **狀態：** 已確認（使用者要求開始選單/選擇無人機場景更有趣，並有簡潔的非同步載入動畫）
+- **決定：**
+  - `SceneLoader` 改為非同步載入 + Loading 畫面（旋轉螺旋槳的無人機圖示、進度條、百分比、操作提示），`allowSceneActivation` 搭配最短顯示 0.9 秒；Canvas 使用 Screen Space - Camera 綁定 Main Camera，PC 與 VR 都看得到。`SceneChanger.LoadScene`、`GameManager1.LoadScene` 改走 `SceneLoader`。
+  - `MenuSceneDecor`：開始選單＝晨間天空盒、遠景霧、從高樓眺望台灣街景城市、主角無人機懸浮擺動、三架帶光軌的巡航無人機；選擇場景＝屋頂停機坪（女兒牆、欄杆、水塔）、發光展示台、選中的無人機水平旋轉懸浮，原地形隱藏。選擇按鈕錯字「Selete Game」改為「開始任務」。
+  - 由選單「無人機遊戲/6」一鍵佈置（只新增 `MenuDecor`、`MenuCity` 物件）。
+- **相關檔案：** `Gameplay/SceneLoader.cs`、`UI/MenuSceneDecor.cs`、`Editor/MenuSceneSetup.cs`、`SceneChanger.cs`、`Manager/GameManager1.cs`、`Scenes/StartMenu.unity`、`Scenes/PlayerSelectSettings.unity`
+
+## D-015：城市關卡烘焙為固定場景、優先使用素材、競速障礙物
+
+- **日期：** 2026-10-14
+- **狀態：** 已確認（使用者要求：關卡內容固定不要隨機、盡量使用準備的素材且材質寫實、避免長時間載入與卡頓、加入障礙物增加趣味、檢查點縮小）
+- **決定：**
+  - 新增選單「無人機遊戲/7. 烘焙固定關卡場景」：依 `LevelCatalog` 參數在編輯器生成一次，網格存到 `Assets/GeneratedLevels/<場景>/`、執行時建立的材質存到 `Assets/GeneratedLevels/SharedMaterials/`，產生固定場景 `CityResidential`（住宅區）與 `CityDowntown`（市中心），並烘焙兩個選單背景城市。`CityGenerator.baked = true` 時執行時不再生成，只建立車流/路人與競速檢查點；降落點、起飛點與競速路線隨場景保存。烘焙後的場景可直接在 Editor 手動調整。
+  - `LevelCatalog` 兩個新城區關卡改指向固定場景；原 `CityProcedural` 保留作為範本與測試。
+  - 建築：有建築的地塊 85% 使用 POLYGON city pack 建築模型（放不下改為騎樓街屋），不再使用方塊大樓。
+  - 街道設施改用 LowpolyStreetPack：路燈（LampPost_D/J）、行道樹、電線桿與電線、消防栓/長椅/郵筒/電箱/報攤/電話亭、交通錐與路障、行人天橋；放置時套用 `Assets/Materials/OrganicCity/LowpolyStreetPack/*_URP.mat`、移除內建燈光與光錐。
+  - 道路/人行道/草地改用有貼圖的材質（`Road_Asphalt`、`Sidewalk_Tiles`、`Ground_Grass`），`CityMeshBuilder` 以世界座標投影 UV，貼圖平鋪不拉伸。
+  - 競速路線每段道路放一種固定障礙：行人天橋、跨街電線、跨街布條（中文標語）、施工塔吊（吊臂橫越道路、吊塊懸空、施工圍籬與交通錐）、綠色門架標誌。第一段不放。
+  - 檢查圈半徑：城市 4.5 → 3.5m；訓練場 3.5 → 3.0m。City2 的檢查門 Prefab 未調整。
+  - 路人超過 90m、車輛超過 160m 時不繪製（持續移動），分批檢查避免單幀尖峰。
+- **原因：** 執行時生成會在場景啟用時卡住主執行緒（市中心生成 1.55 秒以上）；固定場景可非同步讀取且內容可手動設計。
+- **限制：** 使用者提供的建築/街道素材本身是低多邊形風格，「寫實」程度受素材限制；要更寫實需要更高品質的建築與 PBR 貼圖素材。
+- **相關檔案：** `Editor/CityLevelBaker.cs`、`Level/CityGenerator.cs`、`Level/CityGenerator.TaiwanStreets.cs`、`Level/CityMeshBuilder.cs`、`Level/DistanceCuller.cs`、`Level/CityTraffic.cs`、`Level/CityPedestrians.cs`、`Gameplay/LevelCatalog.cs`、`CourseBuilder.cs`、`Scenes/CityResidential.unity`、`Scenes/CityDowntown.unity`
+
+## D-016：台北式高密度街區與 Anime Nature 植物
+
+- **日期：** 2026-10-14
+- **狀態：** 已確認（使用者要求植物寫實、所有場景都改，並偏向台灣街景：窄路、沒有人行道、很多騎樓、像台北的高密度）
+- **決定：**
+  - 植物一律使用 Anime Nature（專案內為 `Assets/Download/Anime Trees`，與 Asset Store 快取中的 Hipernt「Anime Nature」為同一套件）：Tree_02~08（Tree_01 約 9 萬面不使用）、Bush_01~04、Grass。沒有 LOD 的模型放置時加上 LODGroup，在畫面上很小時不繪製。
+  - 城市關卡（含選單背景）：行道樹約 6.5m、口袋公園/廣場有樹、灌木與草叢、巷內盆栽。
+  - 其他場景（選單「無人機遊戲/8」）：訓練場 `CourseBuilder` 樹木/灌木/草叢改用 Anime Nature；有機城市的行道樹與灌木規則改用並重新生成；City2 的 86 段低模樹籬隱藏外觀（保留碰撞）改排灌木，草地步道加草叢。
+  - 街區：每個街區中央一條 5m、沒有人行道的巷子（紅黃邊線、單側電線桿與拉到對面外牆的電線、路邊停車、盆栽）；地塊面大馬路為連續騎樓街屋、面巷子為 3~7 樓公寓（35% 有騎樓）；素材包大樓機率依目標樓高 0.175~0.5，多出現在市中心高樓地塊。建築密度：住宅區 0.92、市中心 0.98。
+  - 街屋外牆使用 LowpolyStreetPack `pavement_01` 磁磚貼圖 × 牆色（模擬二丁掛）。
+- **限制：** Anime Nature 為動畫風格（比原本低模植物自然，但不是照片級寫實）；Asset Store 快取另有「Anime Natural Environment」「Idyllic Fantasy Nature」「Stylized Downtown Street」尚未匯入。
+- **相關檔案：** `Level/CityGenerator.TaiwanStreets.cs`、`Level/CityGenerator.cs`、`CourseBuilder.cs`、`Editor/VegetationSetup.cs`、`Editor/CityLevelBaker.cs`、`Gameplay/LevelCatalog.cs`
+
+## D-017：晝夜與天氣系統
+
+- **日期：** 2026-10-14
+- **狀態：** 已確認（使用者要求）
+- **決定：** `EnvironmentController` 自動加入有 `GameManager` 的遊戲關卡（選單不加入）。預設一天 12 分鐘、從 09:30 開始；太陽由東到西、黃昏暖色、夜晚月光 + 夜空天空盒（`Resources/EnvironmentProfile.asset`，選單 9 建立）；夜間/濃霧時玩家相機有前燈。天氣晴/多雲/雨/暴風雨/濃霧每 3~6 分鐘依權重隨機轉換（20 秒漸變），雨天有跟隨相機的雨絲、暴風雨有閃電；風力（陣風）由 `DroneController1` 以加速度套用，載貨越重受影響越小。F6 快轉 3 小時、F7 切換天氣，畫面上方顯示提示。環境光改為 Trilight；天空盒使用材質副本，不改資產。
+- **限制：** 路面不會變濕反光、沒有雷聲音效、城市路燈不會實際照亮（只有店面自發光與前燈）。
+- **相關檔案：** `Gameplay/EnvironmentController.cs`、`Gameplay/EnvironmentProfile.cs`、`Editor/EnvironmentSetup.cs`、`Script_1/DroneController1.cs`
+
 ## 後續決策
 
 新增決策時複製以下格式：

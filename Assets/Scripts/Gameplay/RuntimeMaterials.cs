@@ -9,6 +9,7 @@ public static class RuntimeMaterials
 {
     private static readonly Dictionary<Color, Material> opaqueCache = new Dictionary<Color, Material>();
     private static readonly Dictionary<Color, Material> glowCache = new Dictionary<Color, Material>();
+    private static readonly Dictionary<Color, Material> unlitCache = new Dictionary<Color, Material>();
 
     /// <summary>不透明 Lit 材質</summary>
     public static Material Opaque(Color color)
@@ -21,6 +22,19 @@ public static class RuntimeMaterials
         material.color = color;
         if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color);
         opaqueCache[color] = material;
+        return material;
+    }
+
+    /// <summary>不透明、不受光的自發光色 (紅綠燈燈號、車燈)</summary>
+    public static Material Unlit(Color color)
+    {
+        if (unlitCache.TryGetValue(color, out Material cached) && cached != null) return cached;
+
+        Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+        if (shader == null) return Opaque(color);
+        Material material = new Material(shader) { name = $"Runtime_Unlit_{ColorUtility.ToHtmlStringRGB(color)}" };
+        material.SetColor("_BaseColor", color);
+        unlitCache[color] = material;
         return material;
     }
 
@@ -61,5 +75,6 @@ public static class RuntimeMaterials
     {
         opaqueCache.Clear();
         glowCache.Clear();
+        unlitCache.Clear();
     }
 }

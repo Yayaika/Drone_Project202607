@@ -35,7 +35,8 @@
 | PlayerSelectSettings | 選無人機 → 開啟模式/關卡面板 | `UIPlayerSelectCtrl.EnterStage` | 已擴充 |
 | SampleScene | 訓練場（`CourseBuilder` 隨機穿圈） | 關卡目錄 | 已存在 |
 | City2 | 手工城市＋Spline 賽道 | 關卡目錄 | 已存在 |
-| CityProcedural | 程序化城市（兩個關卡共用） | 關卡目錄；以選單 1 從 SampleScene 複製建立 | **需執行選單建立** |
+| CityProcedural | 程序化城市範本（執行時生成，測試用） | 選單 1 從 SampleScene 複製建立 | 已存在；關卡目錄不再直接使用 |
+| CityResidential / CityDowntown | 由 CityProcedural 烘焙的固定關卡（住宅區 / 市中心） | 關卡目錄；選單 7 重新烘焙（會覆蓋手動修改） | 已存在 |
 | OrganicCityTest | 有機城市生成器測試（自由飛行相機） | 無（未加入 Build Settings / LevelCatalog） | 選單 4 可重建 |
 | NextSecondScene、DronePickupTest、SceneTestDrone、PlayerSetting2 | 測試用 | — | 未納入流程 |
 
@@ -50,7 +51,15 @@
 | `SpawnCtrl` | 依 `GameManager1.playerIndex` 生成無人機 | `PlayerDB` | 未修改 |
 | `LevelCatalog`（static） | 關卡清單、目前模式/關卡、下一關 | `SceneLoader` | 新增關卡在 `All` 加一筆 |
 | `DeliveryMissionManager` | 搬運訂單流程與計分 | `IDeliverySpotProvider`、`DeliveryZone`、`GameManager` | 搬運模式下由 CityGenerator 或 GameManager 自動建立 |
-| `CityGenerator` | 程序化城市、起飛廣場、屋頂/街道降落點、競速路線 | `CourseBuilder.CreateCheckpointRing` | `DefaultExecutionOrder(-200)`，需早於 `SpawnCtrl.Awake` |
+| `CityGenerator` | 程序化城市、起飛廣場、屋頂/街道降落點、競速路線；`TaiwanStreets` 部分類別負責台灣街景（標線、騎樓街屋、招牌、路燈、停放機車） | `CourseBuilder.CreateCheckpointRing`、`CityMeshBuilder` | `DefaultExecutionOrder(-200)`，需早於 `SpawnCtrl.Awake`；Play 時在 Awake 建立車流與路人 |
+| `CityTraffic` | 紅綠燈時相與燈號、汽車/機車車道、跟車、停等、左轉讓行、轉彎禮讓行人 | `CityGrid`（路網資訊）、`CityPedestrians.Instance` | 掛在 `GeneratedCity` 根物件，單一元件統一更新所有車輛 |
+| `CityPedestrians` | 路人沿人行道繞行、等行人綠燈過馬路、登記斑馬線佔用 | `CityTraffic.Instance` | 同上；停用 CityPeople 自帶的隨機動畫腳本 |
+| `CityMeshBuilder` | 把方塊/柱體依材質合併成網格，世界座標投影 UV | — | 世界座標建構 |
+| `DistanceCuller` | 依相機距離切換路人/車輛的 Renderer 與 Animator | — | 由 CityTraffic / CityPedestrians 使用 |
+| `EnvironmentController` | 晝夜、天氣、雨、閃電、風力、夜間前燈 | `EnvironmentProfile`（Resources）、`DroneController1` 讀取 `Wind` | 自動加入有 GameManager 的場景 |
+| `SceneLoader` | 非同步載入 + Loading 畫面（Screen Space - Camera） | `RuntimeUI` | 跨場景常駐，所有場景切換都應呼叫 `SceneLoader.Load` |
+| `MenuSceneDecor` | 選單場景動態背景、巡航無人機、展示台 | `UIPlayerSelectCtrl`、`CityGenerator`（背景城市） | 選單 6 佈置 |
+| `CityLevelBaker`（Editor） | 烘焙固定關卡、填入 LowpolyStreetPack 素材 | `CityGenerator`、`LevelCatalog` | 選單 7 |
 | `GameAudio`（static） | SFX/BGM 播放 | `Resources/Audio` | 缺檔靜音並記錄 |
 
 ## 5. 系統關係

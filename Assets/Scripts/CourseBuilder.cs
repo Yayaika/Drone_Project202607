@@ -9,6 +9,14 @@ public class CourseBuilder : MonoBehaviour
     public float courseLength = 150f;
     public int treeCount = 30;
 
+    [Header("植物 (Anime Nature，由選單 8 填入；留空則使用簡易樹)")]
+    public GameObject[] treePrefabs;
+    public GameObject[] bushPrefabs;
+    public GameObject[] grassPrefabs;
+    public Vector2 treeHeightRange = new Vector2(9f, 16f);
+    public int bushCount = 40;
+    public int grassCount = 160;
+
     [Header("防擋道設定 (安全距離)")]
     [Tooltip("樹木與檢查圈、起終點平台的水平安全距離")]
     public float safetyRadius = 12f;
@@ -85,6 +93,50 @@ public class CourseBuilder : MonoBehaviour
                 CreateTree(treePos);
             }
         }
+
+        ScatterGroundCover();
+    }
+
+    /// <summary>灌木與草叢 (避開賽道中央，讓場地不再是單調的平面)</summary>
+    void ScatterGroundCover()
+    {
+        for (int i = 0; i < bushCount && bushPrefabs != null && bushPrefabs.Length > 0; i++)
+        {
+            Vector3 p = new Vector3(Random.Range(-45f, 45f), 0f, Random.Range(-15f, courseLength + 15f));
+            if (Mathf.Abs(p.x) < 8f) continue;
+            PlaceVegetation(bushPrefabs[Random.Range(0, bushPrefabs.Length)], p, Random.Range(1.2f, 2.5f), false, 0.05f, true);
+        }
+        for (int i = 0; i < grassCount && grassPrefabs != null && grassPrefabs.Length > 0; i++)
+        {
+            Vector3 p = new Vector3(Random.Range(-50f, 50f), 0f, Random.Range(-20f, courseLength + 20f));
+            GameObject grass = PlaceVegetation(grassPrefabs[Random.Range(0, grassPrefabs.Length)], p, Random.Range(0.6f, 1f), false, 0.08f, true);
+            if (grass == null) continue;
+            foreach (Renderer r in grass.GetComponentsInChildren<Renderer>()) r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        }
+    }
+
+    /// <summary>放置植物並縮放 (size = 樹高，或 byWidth 時為寬度)；沒有 LOD 的模型加上遠距剔除</summary>
+    GameObject PlaceVegetation(GameObject prefab, Vector3 pos, float size, bool keepCollider, float cullScreenHeight, bool byWidth = false)
+    {
+        if (prefab == null) return null;
+        GameObject plant = Instantiate(prefab, pos, Quaternion.Euler(0f, Random.Range(0f, 360f), 0f) * prefab.transform.rotation);
+        Renderer[] renderers = plant.GetComponentsInChildren<Renderer>();
+        if (renderers.Length == 0) return plant;
+        Bounds bounds = renderers[0].bounds;
+        foreach (Renderer r in renderers) bounds.Encapsulate(r.bounds);
+        float measured = byWidth ? Mathf.Max(bounds.size.x, bounds.size.z) : bounds.size.y;
+        if (measured > 0.01f) plant.transform.localScale *= size / measured;
+        if (!keepCollider)
+        {
+            foreach (Collider c in plant.GetComponentsInChildren<Collider>()) Destroy(c);
+        }
+        if (plant.GetComponent<LODGroup>() == null)
+        {
+            LODGroup group = plant.AddComponent<LODGroup>();
+            group.SetLODs(new[] { new LOD(cullScreenHeight, renderers) });
+            group.RecalculateBounds();
+        }
+        return plant;
     }
 
     void CreatePlatform(Vector3 pos, Color color, string label)
@@ -124,7 +176,7 @@ public class CourseBuilder : MonoBehaviour
 
     void CreateCheckpointRing(Vector3 pos, int index)
     {
-        CreateCheckpointRing(pos, index, Quaternion.identity, 3.5f);
+        CreateCheckpointRing(pos, index, Quaternion.identity, 3f);
     }
 
     /// <summary>建立一個檢查圈 (亦供程序化城市賽道使用)，rotation 決定圈面朝向</summary>
@@ -164,6 +216,16 @@ public class CourseBuilder : MonoBehaviour
 
     void CreateTree(Vector3 pos)
     {
+        if (treePrefabs != null && treePrefabs.Length > 0)
+        {
+            GameObject prefab = treePrefabs[Random.Range(0, treePrefabs.Length)];
+            if (prefab != null)
+            {
+                PlaceVegetation(prefab, pos, Random.Range(treeHeightRange.x, treeHeightRange.y), true, 0.03f);
+                return;
+            }
+        }
+
         GameObject tree = new GameObject("Tree");
         tree.transform.position = pos;
 

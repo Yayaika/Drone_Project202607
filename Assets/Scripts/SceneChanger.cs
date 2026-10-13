@@ -17,7 +17,8 @@ public class SceneChanger : MonoBehaviour
 
     public void LoadScene(string sceneName)
     {
-        SceneManager.LoadScene(sceneName);
+        // 改走非同步載入 + Loading 畫面
+        SceneLoader.Load(sceneName);
     }
 
     public void QuitGame()

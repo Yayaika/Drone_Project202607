@@ -19,7 +19,9 @@ public class LevelDefinition
     public string SceneName;
     public GameModeType[] SupportedModes;
 
-    // 程序化城市參數 (僅 CityProcedural 場景使用)
+    // 程序化城市參數：由選單「7. 烘焙固定關卡場景」依這些參數生成一次並存成固定場景
+    /// <summary>此關卡是由程序化城市烘焙而成的固定場景</summary>
+    public bool BakedCity;
     public int CitySeed;
     public int CityBlocks = 5;
     public float BuildingDensity = 0.85f;
@@ -83,13 +85,14 @@ public static class LevelCatalog
         {
             Id = "city_suburb",
             DisplayName = "新城區・住宅區",
-            Description = "程序生成的低密度住宅區，建築較矮、街道寬闊。",
-            SceneName = ProceduralCityScene,
+            Description = "台灣街景住宅區：騎樓街屋、巷弄電線與天橋，建築較矮。",
+            SceneName = "CityResidential",
+            BakedCity = true,
             SupportedModes = new[] { GameModeType.Race, GameModeType.Delivery },
             CitySeed = 1207,
             CityBlocks = 4,
-            BuildingDensity = 0.7f,
-            MaxBuildingHeight = 25f,
+            BuildingDensity = 0.92f,
+            MaxBuildingHeight = 28f,
             CheckpointCount = 8,
             GoldTime = 60f,
             SilverTime = 90f,
@@ -100,12 +103,13 @@ public static class LevelCatalog
         {
             Id = "city_downtown",
             DisplayName = "新城區・市中心",
-            Description = "程序生成的高樓密集市中心，穿梭大樓之間。",
-            SceneName = ProceduralCityScene,
+            Description = "台灣街景市中心：高樓、施工塔吊與跨街布條，穿梭大樓之間。",
+            SceneName = "CityDowntown",
+            BakedCity = true,
             SupportedModes = new[] { GameModeType.Race, GameModeType.Delivery },
             CitySeed = 4242,
             CityBlocks = 6,
-            BuildingDensity = 0.95f,
+            BuildingDensity = 0.98f,
             MaxBuildingHeight = 60f,
             CheckpointCount = 12,
             GoldTime = 85f,

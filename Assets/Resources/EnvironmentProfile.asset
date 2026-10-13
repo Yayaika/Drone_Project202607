@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5122d056145f1e342a838369b13d8cc1, type: 3}
+  m_Name: EnvironmentProfile
+  m_EditorClassIdentifier: 
+  nightSkybox: {fileID: 2100000, guid: c1c961cbd00909b45b34d97fd7df5cbf, type: 2}
+  dayLengthMinutes: 12
+  startHour: 9.5
+  weatherChangeInterval: {x: 180, y: 360}
+  weatherBlendSeconds: 20
+  clearWeight: 0.4
+  cloudyWeight: 0.25
+  rainWeight: 0.15
+  stormWeight: 0.08
+  fogWeight: 0.12
+  windEffect: 1
