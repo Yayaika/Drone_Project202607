@@ -5685,6 +5685,8 @@ MonoBehaviour:
   headingPixelsPerDegree: 2.2
   sideColumnOffset: 150
   topBottomOffset: 112
+  settingsButtonHeight: 138
+  settingsButtonOffsetX: 125
   warningColor: {r: 1, g: 0.32, b: 0.25, a: 1}
   cautionColor: {r: 1, g: 0.85, b: 0.2, a: 1}
 --- !u!1 &2142681681719497472
@@ -22786,29 +22788,42 @@ MonoBehaviour:
   isGrounded: 1
   isInverted: 1
   maxThrust: 40
-  altitudeHoldStrength: 5
-  horizontalSpeedBoost: 15
+  altitudeHoldStrength: 8
+  horizontalSpeedBoost: 0
+  maxClimbRate: 5
+  maxDescentRate: 3
+  maxVerticalAcceleration: 10
+  motorResponseTime: 0.05
   baseMass: 1
   payloadMass: 0
   cruisePitchAngle: -12
   maxTiltAngle: 20
   maxYawRate: 300
-  stabilizerStrength: 15
-  attitudeDamping: 0.8
+  stabilizerStrength: 40
+  bodyAngularDamping: 2
+  attitudeDamping: 5.5
   attitudeGain: 2
   stickExpo: 0.3
-  stickResponse: 8
-  yawAcceleration: 900
+  stickResponse: 15
+  yawAcceleration: 1500
   payloadAgilityLoss: 0.35
   turbulenceStrength: 0.25
+  linearDrag: 0.15
+  quadraticDrag: 0.03
+  maxHorizontalSpeed: 12
+  horizontalResponse: 3
+  maxHorizontalAccel: 12
+  tiltVisualScale: 0.6
   wallPushOut: 6
   wallBounce: 0.2
   groundNormalThreshold: 0.6
   batteryHoverSeconds: 600
   propellers: []
   propIdleRPM: 800
-  propHoverRPM: 2800
+  propHoverRPM: 2000
   propMaxRPM: 3500
+  propMaxStepDegrees: 35
+  mixerTorqueScale: 0.02
   xrOriginTransform: {fileID: 1037122760699329869}
   cameraPositions:
   - {fileID: 5276270790676967624}

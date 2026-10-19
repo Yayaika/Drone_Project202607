@@ -110,6 +110,8 @@ public class GameManager : MonoBehaviour
         // 等一幀，讓 SpawnCtrl / RaceManager / 任務管理器完成初始化與無人機定位
         yield return null;
 
+        // 賽道 (RaceManager / 城市生成器) 可能在本元件 Start 之後才設定總檢查點數，這裡重新整理顯示
+        UpdateProgressUI();
         DroneController1 drone = GetDrone();
         BindRespawn(drone);
         if (drone != null) drone.canControl = false;
@@ -186,12 +188,11 @@ public class GameManager : MonoBehaviour
     {
         if (drone == null || subscribedDrone == drone) return;
 
-        // City2 的 RaceManager 自己處理重生；其他場景由 GameManager 負責回到最後檢查點
-        if (FindFirstObjectByType<RaceManager>() != null) return;
-
+        // 所有場景 (含 City2) 都由 GameManager 負責按 R 回到最後檢查點
         subscribedDrone = drone;
         drone.OnRespawnPressed += RespawnAtLastCheckpoint;
-        RecordRespawnPoint(drone.transform.position, drone.transform.forward);
+        // RaceManager 已先記錄起飛點時不要覆蓋
+        if (!hasCheckpointRespawn) RecordRespawnPoint(drone.transform.position, drone.transform.forward);
     }
 
     private void RespawnAtLastCheckpoint()

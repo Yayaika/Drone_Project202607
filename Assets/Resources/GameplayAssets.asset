@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 792eab13ae046e4488a5c072314fac6e, type: 3}
+  m_Name: GameplayAssets
+  m_EditorClassIdentifier: 
+  checkpointRing: {fileID: 3351319555248393924, guid: 867af66d06ba40b48a3a40cdcbcda8d8, type: 3}
+  bombPrefab: {fileID: 5859853512765820330, guid: ec6a23314dec35b48bc5c45d7b6e7d21, type: 3}
+  explosionEffect: {fileID: 100004, guid: b46890100828db6429ff69c322b45893, type: 3}
+  fireEffect: {fileID: 100000, guid: a817de05addd7b64faa73b34c74013ce, type: 3}
+  smallFireEffect: {fileID: 100000, guid: 5a4723eba1f3efd4e992d78be01cb3f0, type: 3}
+  smokeEffect: {fileID: 100000, guid: 6a3cb4ac8fa12944ba1233cbec0e9c69, type: 3}
+  airplanePrefab: {fileID: 3799732381268282331, guid: 7da7f9f2fecda974c9b3e16e28330244, type: 3}

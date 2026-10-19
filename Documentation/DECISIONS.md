@@ -179,6 +179,75 @@
 - **限制：** 路面不會變濕反光、沒有雷聲音效、城市路燈不會實際照亮（只有店面自發光與前燈）。
 - **相關檔案：** `Gameplay/EnvironmentController.cs`、`Gameplay/EnvironmentProfile.cs`、`Editor/EnvironmentSetup.cs`、`Script_1/DroneController1.cs`
 
+## D-018：擬真化飛行控制與螺旋槳視覺
+
+- **日期：** 2026-10-19
+- **狀態：** 已確認（使用者要求「更接近現實無人機機動性能」）
+- **背景：** 原本油門直接對應推力（一推即彈射、下降近似自由落體），水平有非物理的 `horizontalSpeedBoost`，阻力為固定 linearDamping 1.0；螺旋槳只依搖桿決定同一轉速，且以「RPM」當作度/秒旋轉，在 Editor 20~45 fps 時每幀轉 90°~140°，3 葉槳（每 120° 對稱）出現倒轉/靜止的車輪效應。
+- **決定：**
+  - 油門改為控制目標垂直速度（爬升 5 m/s、下降 3 m/s、垂直加速度上限 6 m/s²），回中即定高；推力經馬達反應延遲（0.08 s）；載重降低可用推力。
+  - 移除水平推力輔助（兩個無人機 Prefab 設為 0），最大傾角 20°→30°，改用二次方空氣阻力（傾 30° 極速約 11.5 m/s）。
+  - 自平（ANGLE）模式放開搖桿時，自動反向傾斜煞車（類似實機 GPS 定點）；CRUISE／VERT 模式不變。
+  - 螺旋槳各自計算轉速：轉速 ∝ √推力，加上 X 型混控（前傾時後槳加速、滾轉時對側加速、偏航時同轉向一對加速）；每幀轉角上限 35°，消除車輪效應；熄火後慢慢停轉。懸停視覺轉速 2800→2000。
+- **原因：** 接近消費級無人機（DJI 類）的升降速度與煞車行為，螺旋槳轉速變化與實際推力一致。
+- **替代方案：** 改為完整速度控制模式（搖桿對應目標水平速度）——改變操控方式較大，未採用。
+- **影響範圍：** 所有使用 `DroneController1` 的無人機；競速關卡圈速可能改變（極速略升、起步加速略慢、放開搖桿會自動停下）。
+- **相關檔案：** `Script_1/DroneController1.cs`、`Prefabs/Drone_Bomb.prefab`、`Prefabs/Drone_Parent Variant.prefab`
+
+## D-019：設置按鈕/ESC、檢查圈改版、City2 賽道、炸彈、空中飛機、街道設施碰撞
+
+- **日期：** 2026-10-19
+- **狀態：** 已確認（使用者要求）
+- **決定：**
+  - HUD「設置」按鈕執行時移到畫面上方正中央（航向帶上方）、加大並顯示 ESC 圖示；ESC／手把 Start 開關設置面板，面板開啟時暫停（timeScale = 0）。有 HUD 設置面板時 `OptionsMenu` 不再處理 ESC。
+  - 檢查圈改用 `Prefabs/ring target 20`（圈面朝飛行方向），以薄盒觸發區判定穿越；未通過的檢查圈以 LineRenderer 依序連線，通過後該圈縮小消失。素材集中在 `Resources/GameplayAssets.asset`。
+  - City2：`RaceManager` 改為沿 Spline 一次生成整串檢查圈（約每 30 m，含終點），長度不足 100 m 的草稿 Spline 不抽中，同一路線可反向飛；重生、計時、結算統一交給 GameManager。舊的單一移動閘門 (`GateTrigger`) 保留為空元件避免 Missing Script。
+  - 炸彈無人機：B／右扳機投下機腹炸彈（`Prefabs/Bomb.prefab`，3 秒裝填），落地爆炸（War FX `WFX_Explosion`），8 m 內行人倒地、行駛車輛停下（40 秒後清除）、路邊停車燒毀，附 War FX 火焰與黑煙；其他剛體被衝擊波推開。
+  - 空中飛機：遊戲關卡自動加入 3 架 `Air Plane_1`，橢圓航線在生成時以 SphereCast 檢查不碰到任何碰撞體與檢查圈，各機高度層至少相差 9 m；運動學剛體，無人機撞到會墜機。
+  - 街道設施碰撞：`CityGenerator` 放置的 LowpolyStreetPack 設施改為與網格相同的 MeshCollider（光錐不碰撞）；已烘焙的 CityResidential、CityDowntown 與 OrganicCityTest 一併修正。
+- **限制：** War FX 使用內建管線粒子 Shader，URP 下顯示需實測；行人倒地為整體旋轉（無專用倒地動畫）；City2 沒有車流/行人，炸彈在 City2 只有爆炸與衝擊波。
+- **相關檔案：** `Script_1/DroneFlightHUD.cs`、`Scripts/OptionsMenu.cs`、`Scripts/UI/ControlsHelp.cs`、`Scripts/CourseBuilder.cs`、`Mapscript/RaceManger.cs`、`Mapscript/Cricle.cs`、`Scripts/GameManager.cs`、`Scripts/Gameplay/GameplayAssets.cs`、`Scripts/Gameplay/Bombing.cs`、`Script_1/DroneBombDropper.cs`、`Scripts/Level/AircraftTraffic.cs`、`Scripts/Level/CityTraffic.cs`、`Scripts/Level/CityPedestrians.cs`、`Scripts/Level/CityGenerator.TaiwanStreets.cs`
+
+## D-020：檢查圈連貫配置、炸彈無人機機動性與爆炸調整、低空小飛機
+
+- **日期：** 2026-10-20
+- **狀態：** 已確認（使用者要求）
+- **決定：**
+  - HUD 設置按鈕再往右移到右上方（檢查點進度上方），避開中央航向帶與導航提示（`DroneFlightHUD.settingsButtonOffsetX`）。
+  - 檢查圈：取消連線 (LineRenderer)；所有地圖共用 `RaceCourseLayout`——手繪 Spline 先以 Douglas-Peucker 還原轉折點再圓角；檢查圈朝向取「上一個→下一個」連線方向；城市直角路口先在路口內圓角 (碰撞檢查，不切過街角建築)，沿路線連續擺放，直線約 18 m 一個、轉彎處自動加密 (相鄰方向變化約 30°)，左右/高低錯落，每三個有一個刻意貼近側邊建築/路燈或壓低貼近地面。所有檢查圈尺寸 × 0.65 (`CourseBuilder.RingSizeScale`)。
+  - 炸彈衝擊波改為有上限的速度變化 (無人機最多 4.5 m/s、以水平推開為主)，修正靠太近被瞬間彈到高空；爆炸點地面殘留 War FX 火焰 18 秒。
+  - 掛著炸彈的無人機撞擊速度 ≥ 6 m/s 時炸彈在機腹引爆，之後照常裝填。
+  - Drone_Bomb 單獨提高機動性（傾角 40°、阻力 0.02 → 極速約 17 m/s、爬升 7 / 下降 4 m/s、垂直加速度 9、姿態增益 22、搖桿反應 11、偏航角加速度 1200、馬達反應 0.06 s）；Drone_Parent Variant 不變。
+  - 飛機縮小為 0.5 倍，最低離地 6 m：收集所有可行航線 (城市生成器關卡為沿街道上空繞街區的 `CityGenerator.GetStreetLoops`，其他場景如 City2 為檢查圈附近網格化的圓形航線)，每條取最低淨空高度，越低、越接近檢查圈越優先，並盡量分散；仍以 SphereCast 保證不碰任何模型，航線水平範圍重疊的飛機高度相差至少 6 m。
+- **相關檔案：** `Scripts/Gameplay/RaceCourseLayout.cs`、`Scripts/CourseBuilder.cs`、`Scripts/Level/CityGenerator.cs`、`Mapscript/RaceManger.cs`、`Scripts/Gameplay/Bombing.cs`、`Script_1/DroneBombDropper.cs`、`Scripts/Level/AircraftTraffic.cs`、`Prefabs/Drone_Bomb.prefab`
+
+## D-021：飛控反應加快
+
+- **日期：** 2026-10-20
+- **狀態：** 已確認（使用者回報「飛控反應太慢」）
+- **原因：** 姿態增益低 (stabilizerStrength 15 × attitudeGain 2，自然頻率約 5.5 rad/s) 且程式固定剛體角阻尼 6，從水平傾到目標角度約 0.4–0.5 秒；搖桿平滑 8/s、垂直加速度上限 6 m/s² 也增加延遲。
+- **決定：** 剛體角阻尼改為可調 `bodyAngularDamping` (預設 2)；兩台無人機 stabilizerStrength 40、attitudeDamping 5.5 (阻尼比約 0.73，不會過衝)、altitudeHoldStrength 8、馬達反應 0.05 s；一般無人機搖桿反應 15、垂直加速度 10、偏航角加速度 1500；炸彈無人機搖桿反應 18、垂直加速度 13、偏航角加速度 2000。
+- **相關檔案：** `Script_1/DroneController1.cs`、`Prefabs/Drone_Parent Variant.prefab`、`Prefabs/Drone_Bomb.prefab`
+
+## D-022：水平移動改為速度輔助、傾斜幅度縮小
+
+- **日期：** 2026-10-20
+- **狀態：** 已確認（使用者回報「前後左右反應太久」「傾斜幅度改小」）
+- **原因：** 原本純物理：搖桿只決定傾角 (最多 30°)，加速度受限於 g·tan(傾角) ≈ 5.7 m/s²，起步到極速超過 2 秒；放開時煞車只用 24° 傾角，2–3 秒才停。
+- **決定：** 自平 (ANGLE) 模式改為速度輔助：搖桿決定目標水平速度 (一般 12 m/s、炸彈無人機 17 m/s)，以 `horizontalResponse` (1/秒) 追上、加減速上限 `maxHorizontalAccel` (12 / 16 m/s²)，並補償空氣阻力；不足的水平加速度由輔助力提供，因此機身只需小幅傾斜 (`tiltVisualScale` 0.6，傾角上限一般 20°、炸彈無人機 25°)。取代原本的自動煞車參數。CRUISE / VERT 模式不變。
+- **取捨：** 水平運動不再完全由傾角物理決定 (較像遊戲/實機 GPS 模式的手感)，傾斜主要是視覺表現。
+- **相關檔案：** `Script_1/DroneController1.cs`、`Prefabs/Drone_Parent Variant.prefab`、`Prefabs/Drone_Bomb.prefab`
+
+## D-023：City2 移到世界中心並豐富場景物件
+
+- **日期：** 2026-10-20
+- **狀態：** 已確認（使用者要求）
+- **決定：**
+  - City2 所有根物件整體平移 (-127.7, -187.95, +579)，可玩範圍 (邊界牆) 中心位於世界原點、路面高度 y = 0；賽道 Spline、起點、Spawner 一併移動，執行時邏輯不依賴座標。
+  - 新增編輯器工具「無人機遊戲/10. 豐富 City2 場景物件」(`Editor/City2Decorator.cs`)：以 1m 網格辨識道路 / 人行道 / 空地，擺放路燈 (LampPost_D/J，燈臂朝向馬路)、行道樹 (Anime Nature)、街道設施 (長椅、消防栓、郵筒…)、路邊停車、停車場 (成排車位) 與小綠地 (灌木樹籬、樹、長椅、公園燈)。物件放在場景根物件「City2_Decor」下，可重複執行 (固定亂數種子)。
+  - 不擋賽道：所有可抽中的賽道 Spline 水平 3.5m 內與起點 6m 內不放；放置後以 OverlapBox 檢查，碰到建築或其他物件即移除，避免穿模；碰撞體與模型同形 (街道設施 MeshCollider、車輛方盒、樹幹膠囊)。
+- **相關檔案：** `Scenes/City2.unity`、`Scripts/Editor/City2Decorator.cs`、`Scripts/Editor/CityLevelBaker.cs`
+
 ## 後續決策
 
 新增決策時複製以下格式：

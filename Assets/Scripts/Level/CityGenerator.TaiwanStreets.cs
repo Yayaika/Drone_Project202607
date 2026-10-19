@@ -466,14 +466,29 @@ public partial class CityGenerator
             propRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
         }
 
-        Bounds bounds = WorldBounds(prop);
-        BoxCollider box = prop.AddComponent<BoxCollider>();
-        box.center = prop.transform.InverseTransformPoint(bounds.center);
-        Vector3 localSize = prop.transform.InverseTransformVector(bounds.size);
-        // 細長的桿子只需包住桿身；燈臂/樹冠以縮小的方塊近似，避免整個方塊擋住街道
-        box.size = new Vector3(Mathf.Abs(localSize.x) * 0.6f, Mathf.Abs(localSize.y), Mathf.Abs(localSize.z) * 0.6f);
+        FitPropColliders(prop);
         SetStaticRecursively(prop);
         return true;
+    }
+
+    /// <summary>
+    /// 街道設施的碰撞體改為與模型相同形狀的 MeshCollider (低面數網格)。
+    /// 原本以整體包圍盒近似，路燈 (LampPost_D / J 等) 的燈臂伸到馬路上方，方塊會擋住一大片街道。
+    /// 光錐 (LightShape) 與已隱藏的網格不產生碰撞。烘焙場景的舊路燈可用同一方法修正。
+    /// </summary>
+    public static void FitPropColliders(GameObject prop)
+    {
+        foreach (Collider existing in prop.GetComponentsInChildren<Collider>(true)) DestroyNow(existing);
+        foreach (MeshFilter filter in prop.GetComponentsInChildren<MeshFilter>(true))
+        {
+            Mesh mesh = filter.sharedMesh;
+            if (mesh == null || mesh.name.Contains("LightShape")) continue;
+            Renderer filterRenderer = filter.GetComponent<Renderer>();
+            if (filterRenderer != null && !filterRenderer.enabled) continue;
+
+            MeshCollider meshCollider = filter.gameObject.AddComponent<MeshCollider>();
+            meshCollider.sharedMesh = mesh;
+        }
     }
 
     private PolygonCityModels.Measurement MeasurePrefab(GameObject prefab)

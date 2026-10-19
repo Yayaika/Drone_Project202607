@@ -1,244 +1,243 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Splines;
-using Unity.Mathematics;
 using TMPro;
 
+/// <summary>
+/// City2 競速：從場景中的 Spline 路線隨機抽一條 (可反向飛)，沿路線一次生成整串連續的檢查圈 (ring target 20)，
+/// 通過的檢查圈會消失。進度、計時、重生 (R) 與結算統一由 GameManager 處理。
+/// </summary>
 public class RaceManager : MonoBehaviour
 {
     [Header("多賽道隨機系統")]
     public SplineContainer[] availableSplines;   // 這裡放你所有的路線 (Spline)
-    public Transform[] availableStartPoints;     // 這裡放每一條路線對應的起點
-    
-    [Header("設定")]
-    public GameObject gatePrefab;        // 這裡放你的圓圈 Prefab (藍圖)
-    private GameObject gateInstance;     // 系統真正在場上生出來的實體
+    public Transform[] availableStartPoints;     // 舊版欄位：起點改由路線本身決定，保留以免場景引用遺失
 
-    [Header("比賽設定")]
-    public int totalWaypoints = 15;      // 預計整條路徑要過幾個點
-    public int currentIndex = 0;         // 目前進度
-    public int startKnotIndex = 2;
+    [Header("設定")]
+    [Tooltip("舊版單一移動閘門 Prefab (已改用 GameplayAssets 的 ring target 20 檢查圈)")]
+    public GameObject gatePrefab;
+
+    [Header("檢查圈配置")]
+    [Tooltip("直線路段上相鄰檢查圈的距離 (m)，轉彎處會自動加密")]
+    public float checkpointSpacing = 18f;
+    [Tooltip("相鄰檢查圈之間最大方向變化 (度)")]
+    public float maxTurnBetweenGates = 30f;
+    [Tooltip("檢查圈半徑 (m，實際大小再乘上 CourseBuilder.RingSizeScale)")]
+    public float gateRadius = 2.6f;
+    [Tooltip("起飛點到第一個檢查圈的距離 (m)")]
+    public float firstGateDistance = 22f;
+    [Tooltip("短於此長度的 Spline 視為未完成的草稿路線，不會被抽中")]
+    public float minRouteLength = 100f;
+    [Tooltip("路線可反向飛行 (同一條 Spline 產生兩種賽道)")]
+    public bool allowReverseRoutes = true;
+    [Tooltip("檢查圈中心離地面最少高度 (m)")]
+    public float minGateHeight = 4f;
+
+    [Header("比賽設定 (執行時自動計算)")]
+    public int totalWaypoints = 15;      // 本次生成的檢查圈數量
+    public int currentIndex = 0;         // 舊版欄位
+    public int startKnotIndex = 0;       // 舊版欄位
 
     [Header("計時器 UI")]
-    public TextMeshProUGUI timerText;    // 綁定顯示時間的文字
-    
-    // 計時器內部變數
-    private float raceTimer = 0f;
-    private bool isRacing = false;
-    
+    public TextMeshProUGUI timerText;    // 舊版欄位：計時改由 GameManager 顯示
+
     [Header("玩家設定")]
     public Transform droneTransform;
-    
-    // 系統自動指派的變數
-    private SplineContainer raceSpline;   
-    private Transform trackStartPoint;
 
-    // === 重生點記錄變數 ===
-    private Vector3 lastCheckpointPosition;
-    private Quaternion lastCheckpointRotation;
-    private DroneController1 droneCtrl;
-    private float lastTriggerTime = 0f; // 用來防止同一個 Checkpoint 被連續觸發多次
-    private bool hasInitializedDrone = false;
+    private readonly List<Vector3> route = new List<Vector3>();
+    private readonly List<float> routeDistance = new List<float>();
+    private Vector3 startPosition;
+    private Vector3 startFacing = Vector3.forward;
+    private bool hasInitializedDrone;
+
+    private const int SamplesPerMeter = 1;
 
     void Awake()
     {
-        if (availableSplines != null && availableSplines.Length > 0 && availableSplines.Length == availableStartPoints.Length)
+        HideLegacySplineLines();
+
+        if (!PickRoute())
         {
-            int randomIndex = UnityEngine.Random.Range(0, availableSplines.Length);
+            Debug.LogWarning("[RaceManager] 找不到可用的賽道路線 (Spline 長度不足)，City2 不會生成檢查圈。");
+            return;
+        }
 
-            SplineContainer spawnedSpline = Instantiate(availableSplines[randomIndex]);
-            Transform spawnedStart = Instantiate(availableStartPoints[randomIndex]);
+        BuildCheckpoints();
 
-            raceSpline = spawnedSpline;
-            trackStartPoint = spawnedStart;
-            GameObject spawnerObj = GameObject.Find("Spawner");
-            if (spawnerObj != null && trackStartPoint != null)
-            {
-                spawnerObj.transform.position = trackStartPoint.position;
-                spawnerObj.transform.rotation = trackStartPoint.rotation;
-            }
-            // 🌟 新增：把檢查點圓圈也動態生出來！
-            if (gatePrefab != null)
-            {
-                gateInstance = Instantiate(gatePrefab);
-            }
-
-            Debug.Log($"🎲 系統隨機抽中並『動態生成』了第 {randomIndex + 1} 條賽道與圓圈！");
+        // 起飛點放在路線起點並面向第一個檢查圈，SpawnCtrl 會在這裡生成無人機
+        GameObject spawnerObj = GameObject.Find("Spawner");
+        if (spawnerObj != null)
+        {
+            spawnerObj.transform.SetPositionAndRotation(startPosition, Quaternion.LookRotation(startFacing));
         }
     }
 
     void Start()
     {
-        if (droneTransform != null)
-        {
-            droneCtrl = droneTransform.GetComponent<DroneController1>();
-            
-            // 訂閱：當聽到無人機大喊「按了重生」時，執行 RespawnDrone 函式
-            if (droneCtrl != null)
-            {
-                droneCtrl.OnRespawnPressed += RespawnDrone;
-            }
-
-            // 🌟 2. 初始重生點對齊：把記錄點設為「抽中的專屬起跑線」
-            if (trackStartPoint != null)
-            {
-                lastCheckpointPosition = trackStartPoint.position;
-                lastCheckpointRotation = trackStartPoint.rotation;
-                
-                // 遊戲一開始，強制呼叫一次控制器，把無人機精準吸到起跑線上
-                if (droneCtrl != null)
-                {
-                    droneCtrl.RespawnAtCheckpoint(lastCheckpointPosition, lastCheckpointRotation);
-                }
-            }
-        }
-
-        // 遊戲開始時，先將圓圈放到第一個點 (t=0)
-        UpdateGatePosition();
-        isRacing = true;
-
-        // 讓 GameManager 負責倒數、計時、結算；總檢查點 = 本賽道的通過點數
         if (GameManager.Instance != null)
         {
             GameManager.Instance.totalCheckpoints = totalWaypoints;
             GameManager.Instance.passedCheckpoints = 0;
         }
-    }
-
-    // 安全機制，關閉時取消監聽
-    private void OnDestroy()
-    {
-        if (droneCtrl != null)
-        {
-            droneCtrl.OnRespawnPressed -= RespawnDrone;
-        }
+        RingTrigger.SetNavigationTo(0);
     }
 
     void Update()
     {
-        if (!hasInitializedDrone || droneTransform == null)
+        if (!hasInitializedDrone) FindDynamicDroneAndInitialize();
+    }
+
+    #region 路線
+
+    /// <summary>把舊的 Spline 預覽線關掉 (位置是未對齊的舊資料)，路線改由檢查圈連線呈現</summary>
+    private void HideLegacySplineLines()
+    {
+        if (availableSplines == null) return;
+        foreach (SplineContainer spline in availableSplines)
         {
-            FindDynamicDroneAndInitialize();
+            if (spline == null) continue;
+            LineRenderer legacyLine = spline.GetComponent<LineRenderer>();
+            if (legacyLine != null) legacyLine.enabled = false;
         }
     }
 
+    private bool PickRoute()
+    {
+        List<(SplineContainer spline, bool reverse)> candidates = new List<(SplineContainer, bool)>();
+        if (availableSplines != null)
+        {
+            foreach (SplineContainer spline in availableSplines)
+            {
+                if (spline == null || spline.Spline == null || spline.Spline.Count < 2) continue;
+                if (spline.CalculateLength() < minRouteLength) continue;
+                candidates.Add((spline, false));
+                if (allowReverseRoutes) candidates.Add((spline, true));
+            }
+        }
+        if (candidates.Count == 0) return false;
+
+        var chosen = candidates[Random.Range(0, candidates.Count)];
+        SampleRoute(chosen.spline, chosen.reverse);
+        Debug.Log($"🎲 賽道：{chosen.spline.name}{(chosen.reverse ? " (反向)" : string.Empty)}，全長 {routeDistance[routeDistance.Count - 1]:0} m");
+
+        startPosition = route[0];
+        Vector3 ahead = PointAtDistance(Mathf.Min(8f, TotalLength * 0.5f)) - startPosition;
+        ahead.y = 0f;
+        startFacing = ahead.sqrMagnitude > 0.01f ? ahead.normalized : Vector3.forward;
+        return true;
+    }
+
+    private void SampleRoute(SplineContainer spline, bool reverse)
+    {
+        route.Clear();
+        routeDistance.Clear();
+
+        int samples = Mathf.Max(32, Mathf.CeilToInt(spline.CalculateLength() * SamplesPerMeter));
+        for (int i = 0; i <= samples; i++)
+        {
+            float t = (float)i / samples;
+            if (reverse) t = 1f - t;
+            // EvaluatePosition 已是世界座標
+            Vector3 point = (Vector3)spline.EvaluatePosition(t);
+            if (route.Count > 0 && (point - route[route.Count - 1]).sqrMagnitude < 0.01f) continue;
+            routeDistance.Add(route.Count == 0 ? 0f : routeDistance[routeDistance.Count - 1] + Vector3.Distance(point, route[route.Count - 1]));
+            route.Add(point);
+        }
+    }
+
+    private float TotalLength => routeDistance.Count > 0 ? routeDistance[routeDistance.Count - 1] : 0f;
+
+    private Vector3 PointAtDistance(float distance)
+    {
+        distance = Mathf.Clamp(distance, 0f, TotalLength);
+        int index = routeDistance.BinarySearch(distance);
+        if (index >= 0) return route[index];
+        index = ~index;
+        if (index <= 0) return route[0];
+        if (index >= route.Count) return route[route.Count - 1];
+        float span = routeDistance[index] - routeDistance[index - 1];
+        float k = span > 0.0001f ? (distance - routeDistance[index - 1]) / span : 0f;
+        return Vector3.Lerp(route[index - 1], route[index], k);
+    }
+
+    #endregion
+
+    #region 檢查圈
+
+    private void BuildCheckpoints()
+    {
+        // 手繪 Spline 有接近直角的尖角：先還原轉折點、抬到安全高度 (不卡在建築/招牌裡)，
+        // 再把尖角圓角，最後交給共用配置：連續、轉彎加密、錯落、部分貼近障礙
+        List<Vector3> corners = RaceCourseLayout.Simplify(route, 2f);
+        for (int i = 0; i < corners.Count; i++) corners[i] = PlaceGate(corners[i]);
+        // 圓角只避開建築 (小檢查半徑)；弧線上的檢查圈若碰到街角路燈，PlaceGates 會再微調位置
+        List<Vector3> safeRoute = RaceCourseLayout.RoundCorners(corners, 14f, 4f, 0.3f);
+
+        List<RaceCourseLayout.Gate> gates = RaceCourseLayout.PlaceGates(safeRoute, firstGateDistance, checkpointSpacing, maxTurnBetweenGates,
+            gateRadius * CourseBuilder.RingSizeScale, Random.Range(0, 100000));
+
+        for (int i = 0; i < gates.Count; i++)
+        {
+            if (i == 0)
+            {
+                Vector3 toFirst = gates[0].Position - startPosition;
+                toFirst.y = 0f;
+                if (toFirst.sqrMagnitude > 0.01f) startFacing = toFirst.normalized;
+            }
+
+            GameObject gate = CourseBuilder.CreateCheckpointRing(gates[i].Position, i, gates[i].Rotation, gateRadius);
+            gate.transform.SetParent(transform, true);
+            if (i == gates.Count - 1) gate.name = "Checkpoint_Finish";
+        }
+
+        totalWaypoints = gates.Count;
+    }
+
+    /// <summary>確保檢查圈離地夠高且沒有卡在建築/招牌裡</summary>
+    private Vector3 PlaceGate(Vector3 position)
+    {
+        if (Physics.Raycast(position + Vector3.up * 2f, Vector3.down, out RaycastHit hit, 60f, ~0, QueryTriggerInteraction.Ignore))
+        {
+            position.y = Mathf.Max(position.y, hit.point.y + minGateHeight);
+        }
+
+        for (int attempt = 0; attempt < 8; attempt++)
+        {
+            if (!Physics.CheckSphere(position, gateRadius * CourseBuilder.RingSizeScale, ~0, QueryTriggerInteraction.Ignore)) break;
+            position.y += 1f;
+        }
+        return position;
+    }
+
+    #endregion
+
+    #region 無人機初始化
+
     private void FindDynamicDroneAndInitialize()
     {
-        GameObject droneObj = GameObject.FindWithTag("Player");
+        if (route.Count == 0) return;
 
+        GameObject droneObj = GameObject.FindWithTag("Player");
         if (droneObj == null)
         {
             DroneController1 controller = FindFirstObjectByType<DroneController1>();
             if (controller != null) droneObj = controller.gameObject;
         }
+        if (droneObj == null) return;
 
-        if (droneObj != null)
-        {
-            droneTransform = droneObj.transform;
-            droneCtrl = droneTransform.GetComponent<DroneController1>();
-            
-            if (droneCtrl != null)
-            {
-                droneCtrl.OnRespawnPressed -= RespawnDrone; // 避免重複訂閱
-                droneCtrl.OnRespawnPressed += RespawnDrone; // 正式綁定 R 鍵重置事件
-            }
-            
-            if (trackStartPoint != null)
-            {
-                lastCheckpointPosition = trackStartPoint.position;
-                lastCheckpointRotation = trackStartPoint.rotation;
-                
-                // 👇 🌟 雙重保險：抓到無人機的瞬間，強制將它設定在起點
-                if (droneCtrl != null)
-                {
-                    droneCtrl.RespawnAtCheckpoint(lastCheckpointPosition, lastCheckpointRotation);
-                }
-                hasInitializedDrone = true;
-            }
-        }
-    }
-
-    public void PointReached()
-    {
-        // 防連點機制：0.5 秒內不允許連續觸發兩次
-        if (Time.time - lastTriggerTime < 0.5f) return;
-        lastTriggerTime = Time.time;
-
-        // 🌟 3. 關鍵修復：必須記錄「無人機」的安全殘影，絕對不要記錄圓圈，以免受城市群組座標干擾！
-        /*if (droneTransform != null && raceSpline != null)
-        {
-            lastCheckpointPosition = droneTransform.position; // 位置依然用無人機的安全位置
-            
-            // 算出目前進度 t
-            int knotCount = raceSpline.Spline.Count;
-            int safeStartIndex = Mathf.Clamp(startKnotIndex, 0, knotCount - 1);
-            float startT = (float)safeStartIndex / (knotCount - 1);
-            float rawT = (float)currentIndex / (totalWaypoints - 1);
-            float t = Mathf.Lerp(startT, 1f, rawT);
-
-            // 取得這一段賽道的世界座標方向 (Tangent)
-            float3 localTangent = raceSpline.EvaluateTangent(t);
-            float3 localUp = raceSpline.EvaluateUpVector(t);
-            // 轉換為世界座標的方向
-            Vector3 worldTangent = raceSpline.transform.TransformDirection(localTangent);
-            Vector3 worldUp = raceSpline.transform.TransformDirection(localUp);
-            
-            lastCheckpointRotation = Quaternion.LookRotation(worldTangent, worldUp);
-        }*/
-        if (gateInstance != null)
-        {
-            lastCheckpointPosition = gateInstance.transform.position; 
-            lastCheckpointRotation = gateInstance.transform.rotation;
-        }
-        currentIndex++;
-
-        if (GameManager.Instance != null)
-        {
-            GameManager.Instance.CheckpointPassed(currentIndex - 1);
-        }
-
-        if (currentIndex < totalWaypoints)
-        {
-            UpdateGatePosition();
-            if (raceTimer > 0f) raceTimer -= 1f;
-        }
-        else
-        {
-            gateInstance.SetActive(false); 
-            isRacing = false;            
-            NavigationTarget.Clear();
-            Debug.Log("比賽結束！");
-        }
-    }
-
-    void UpdateGatePosition()
-    {
-        if (raceSpline == null || gateInstance == null) return;
-
-        int knotCount = raceSpline.Spline.Count;
-        int safeStartIndex = Mathf.Clamp(startKnotIndex, 0, knotCount - 1);
-        float startT = (float)safeStartIndex / (knotCount - 1);
-        float rawT = (float)currentIndex / (totalWaypoints - 1);
-        float t = Mathf.Lerp(startT, 1f, rawT);
-
-        float3 localPos = raceSpline.EvaluatePosition(t);
-        float3 localTangent = raceSpline.EvaluateTangent(t);
-        float3 localUp = raceSpline.EvaluateUpVector(t);
-
-        // 🌟 4. 關鍵修復：必須使用 localPosition 才能讓圓圈精準對齊賽道，不會飛到地圖外！
-        gateInstance.transform.localPosition = localPos;
-        gateInstance.transform.localRotation = Quaternion.LookRotation(localTangent, localUp);
-
-        NavigationTarget.Set(gateInstance.transform.position, $"GATE {currentIndex + 1}/{totalWaypoints}", Color.yellow);
-    }
-
-    // === 重生邏輯 ===
-    private void RespawnDrone()
-    {
-        // 直接把 Checkpoint 的位置與方向派發給無人機，讓無人機自己處理物理與重置
+        droneTransform = droneObj.transform;
+        DroneController1 droneCtrl = droneTransform.GetComponent<DroneController1>();
         if (droneCtrl != null)
         {
-            droneCtrl.RespawnAtCheckpoint(lastCheckpointPosition, lastCheckpointRotation);
-            Debug.Log("RaceManager 已呼叫控制器執行重生！");
+            // RespawnAtCheckpoint 會自動加 180 度 (舊版閘門朝向)，這裡先抵銷
+            droneCtrl.RespawnAtCheckpoint(startPosition + Vector3.up * 0.8f, Quaternion.LookRotation(startFacing) * Quaternion.Euler(0f, 180f, 0f));
         }
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.RecordRespawnPoint(startPosition + Vector3.up * 0.8f, startFacing);
+        }
+        hasInitializedDrone = true;
     }
+
+    #endregion
 }

@@ -1,28 +1,9 @@
 using UnityEngine;
 
+/// <summary>
+/// 舊版 City2 單一移動閘門的觸發器 (仍掛在 ring target 20 / AlignedGate Prefab 上)。
+/// 檢查點判定已改由 <see cref="RingTrigger"/> 負責，這個元件保留只為了不讓既有 Prefab 出現 Missing Script。
+/// </summary>
 public class GateTrigger : MonoBehaviour
 {
-    private RaceManager manager;
-
-    void Start()
-    {
-        // 自動找到場景中的管理器
-        manager = Object.FindFirstObjectByType<RaceManager>();
-    }
-
-    private void OnTriggerEnter(Collider other)
-    {
-        // 檢查進入的是不是玩家 (無人機)
-        if (other.CompareTag("Player") || 
-            (other.transform.root != null && other.transform.root.CompareTag("Player")) ||
-            other.GetComponentInParent<DroneController1>() != null ||
-            other.GetComponentInParent<DroneController>() != null)
-        {
-            // 執行管理器裡的過關邏輯
-            if (manager != null)
-            {
-                manager.PointReached();
-            }
-        }
-    }
 }

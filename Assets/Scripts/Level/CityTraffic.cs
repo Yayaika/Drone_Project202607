@@ -89,6 +89,7 @@ public class CityTraffic : MonoBehaviour
         public float S;          // 車頭沿車道的位置；負值 = 仍在路口內轉彎
         public float Speed;
         public float DesiredSpeed;
+        public bool Wrecked;     // 被炸毀：原地停下燃燒，一段時間後清除
         public float Length;
         public bool Committed;
         // 轉彎 (二次貝茲曲線)
@@ -601,6 +602,11 @@ public class CityTraffic : MonoBehaviour
     private void UpdateSpeed(Lane lane, int index, float dt)
     {
         Vehicle vehicle = lane.Vehicles[index];
+        if (vehicle.Wrecked)
+        {
+            vehicle.Speed = 0f;
+            return;
+        }
         float target = vehicle.DesiredSpeed;
         float gap;
 
@@ -769,6 +775,43 @@ public class CityTraffic : MonoBehaviour
         Lane to = vehicle.Next;
         Vector3 p0 = from.Start + from.Dir * from.Length;
         return Vector3.Distance(p0, to.Start) * (vehicle.NextTurn == Turn.Straight ? 1f : 1.12f);
+    }
+
+    #endregion
+
+    #region 炸彈損毀
+
+    [Header("炸彈損毀")]
+    [Tooltip("被炸毀的車輛停在原地燃燒多久後清除 (秒)，清除後後方車流恢復")]
+    [SerializeField] private float wreckClearSeconds = 40f;
+
+    /// <summary>
+    /// 炸彈命中：hit 屬於某輛行駛中的車時，讓它立刻停下 (後方車輛會排隊等候) 並回傳 true。
+    /// 外觀的火焰/煙霧由 <see cref="BurningDamage"/> 處理。
+    /// </summary>
+    public bool TryWreck(Transform hit)
+    {
+        if (hit == null) return false;
+        foreach (Vehicle vehicle in vehicles)
+        {
+            if (vehicle.Root == null || (hit != vehicle.Root && !hit.IsChildOf(vehicle.Root))) continue;
+            if (vehicle.Wrecked) return true;
+
+            vehicle.Wrecked = true;
+            vehicle.Speed = 0f;
+            vehicle.DesiredSpeed = 0f;
+            StartCoroutine(ClearWreckLater(vehicle));
+            return true;
+        }
+        return false;
+    }
+
+    private System.Collections.IEnumerator ClearWreckLater(Vehicle vehicle)
+    {
+        yield return new WaitForSeconds(wreckClearSeconds);
+        if (vehicle.Lane != null) vehicle.Lane.Vehicles.Remove(vehicle);
+        vehicles.Remove(vehicle);
+        if (vehicle.Root != null) Destroy(vehicle.Root.gameObject);
     }
 
     #endregion

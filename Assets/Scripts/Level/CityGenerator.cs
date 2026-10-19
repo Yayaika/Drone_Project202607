@@ -574,21 +574,49 @@ public partial class CityGenerator : MonoBehaviour, IDeliverySpotProvider
     private void BuildRaceCourse()
     {
         if (racePath.Count == 0) ComputeRacePath();
-        List<Vector3> path = racePath;
 
-        for (int i = 0; i < path.Count; i++)
+        // 路口序列是直角轉彎：先在路口內圓角 (不切過街角建築)，再沿路線連續擺放、錯落配置檢查圈
+        float gateRadius = checkpointRadius * CourseBuilder.RingSizeScale;
+        List<Vector3> route = RaceCourseLayout.RoundCorners(racePath, roadWidth * 1.3f, roadWidth * 0.55f, 0.3f);
+        List<RaceCourseLayout.Gate> gates = RaceCourseLayout.PlaceGates(route, 0f, 18f, 30f, gateRadius, seed * 17 + 3);
+        for (int i = 0; i < gates.Count; i++)
         {
-            Vector3 forward = i + 1 < path.Count ? path[i + 1] - path[i] : path[i] - path[i - 1];
-            forward.y = 0f;
-            Quaternion rotation = Quaternion.LookRotation(forward.sqrMagnitude > 0.01f ? forward.normalized : Vector3.forward);
-            CourseBuilder.CreateCheckpointRing(path[i], i, rotation, checkpointRadius);
+            CourseBuilder.CreateCheckpointRing(gates[i].Position, i, gates[i].Rotation, checkpointRadius);
         }
 
         if (GameManager.Instance != null)
         {
-            GameManager.Instance.totalCheckpoints = path.Count;
+            GameManager.Instance.totalCheckpoints = gates.Count;
         }
         RingTrigger.SetNavigationTo(0);
+    }
+
+    /// <summary>
+    /// 低空飛機航線用：沿街區四周道路中心線的封閉迴圈 (1×1、2×1、1×2 個街區，世界座標、貼地高度，未圓角)。
+    /// 道路上方沒有建築，飛機可以壓低到無人機的飛行高度。
+    /// </summary>
+    public List<Vector3[]> GetStreetLoops()
+    {
+        List<Vector3[]> loops = new List<Vector3[]>();
+        Vector2Int[] sizes = { new Vector2Int(1, 1), new Vector2Int(2, 1), new Vector2Int(1, 2) };
+        for (int bx = 0; bx < blocks; bx++)
+        {
+            for (int bz = 0; bz < blocks; bz++)
+            {
+                foreach (Vector2Int size in sizes)
+                {
+                    if (bx + size.x > blocks || bz + size.y > blocks) continue;
+                    loops.Add(new[]
+                    {
+                        IntersectionPosition(new Vector2Int(bx, bz)),
+                        IntersectionPosition(new Vector2Int(bx + size.x, bz)),
+                        IntersectionPosition(new Vector2Int(bx + size.x, bz + size.y)),
+                        IntersectionPosition(new Vector2Int(bx, bz + size.y))
+                    });
+                }
+            }
+        }
+        return loops;
     }
 
     private Vector3 IntersectionPosition(Vector2Int node)

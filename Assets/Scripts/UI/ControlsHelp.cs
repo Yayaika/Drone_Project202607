@@ -42,11 +42,12 @@ public static class ControlsHelp
             new Entry(Key("z"), "抓取 / 放下貨物"),
             new Entry(Key("r"), "回到最後檢查點"),
             new Entry(Key("h"), "切換 HUD 顯示樣式"),
+            new Entry(Key("b"), "投放炸彈（炸彈無人機）"),
+            new Entry(Key("esc"), "開啟 / 關閉設置（暫停）"),
         };
 
         if (hasPauseMenu)
         {
-            entries.Add(new Entry(Key("esc"), "暫停選單"));
             entries.Add(new Entry(Key("f5"), "重新開始本關"));
         }
         return entries;
@@ -63,6 +64,8 @@ public static class ControlsHelp
             new Entry(Key("lb") + Key("xy"), "切換視角"),
             new Entry(Key("rb"), "切換飛行模式"),
             new Entry(Key("share"), "切換 HUD 顯示樣式"),
+            new Entry(Key("rt"), "投放炸彈（炸彈無人機）"),
+            new Entry(Key("xmenu"), "開啟 / 關閉設置（暫停）"),
         };
     }
 

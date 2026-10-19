@@ -9,7 +9,16 @@ public class OptionsMenu : MonoBehaviour
     void Update()
     {
         // 按下 ESC 開啟/關閉選單，並同步暫停/恢復遊戲時間
-        if (Input.GetKeyDown(KeyCode.Escape))
+        // (無人機 HUD 有「設置」面板時，ESC 改由 DroneFlightHUD 開關設置面板，這裡不再重複處理)
+        if (DroneFlightHUD.HandlesEscape)
+        {
+            if (isOpen)
+            {
+                isOpen = false;
+                Time.timeScale = 1f;
+            }
+        }
+        else if (Input.GetKeyDown(KeyCode.Escape))
         {
             isOpen = !isOpen;
             Time.timeScale = isOpen ? 0f : 1f;
@@ -32,7 +41,7 @@ public class OptionsMenu : MonoBehaviour
     {
         // 上方 ESC 狀態提示列 (保留)
         GUI.Box(new Rect(Screen.width / 2 - 80, 10, 160, 30), "");
-        GUI.Label(new Rect(Screen.width / 2 - 75, 13, 150, 25), "ESC = Menu", new GUIStyle()
+        GUI.Label(new Rect(Screen.width / 2 - 75, 13, 150, 25), DroneFlightHUD.HandlesEscape ? "ESC = Settings" : "ESC = Menu", new GUIStyle()
         {
             fontSize = 16,
             fontStyle = FontStyle.Bold,

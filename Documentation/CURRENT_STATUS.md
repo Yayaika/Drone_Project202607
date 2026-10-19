@@ -19,13 +19,17 @@
 
 | 功能 | 狀態 | 證據／相關檔案 | 尚缺內容 |
 |---|---|---|---|
-| 飛行控制（手感） | 部分完成（待實測） | `Script_1/DroneController1.cs`：Expo＋平滑輸入、偏航角加速度、PD 姿態、載重靈活度、氣流擾動 | 需實際試飛調參 |
+| 飛行控制（手感） | 部分完成（2026-10-19 Play Mode 數據驗證：定高、爬升 4.7 m/s、下降 2.9 m/s、30° 極速 11.4 m/s、放開搖桿約 4.7 s 內煞停） | `Script_1/DroneController1.cs`：Expo＋平滑輸入、偏航角加速度、PD 姿態、載重靈活度、氣流擾動；擬真升降速度控制、二次方阻力、自動煞車、馬達延遲（D-018） | 需玩家實際試飛確認手感；螺旋槳視覺未在畫面上目視確認 |
 | 碰撞防吸附 | 部分完成（待實測） | `DroneController1`：接觸法線收集、移除朝牆速度與推力、外推力 | 需在城市建築間實測 |
 | 第三人稱防暈鏡頭 | 部分完成（待實測） | `DroneController1`：TPV 改掛「只跟隨航向」的穩定支架；FPV 可選地平線穩定 | VR 頭顯舒適度待測 |
 | 擬真 HUD（OSD） | 部分完成（待實測） | `Script_1/DroneFlightHUD.cs`：俯仰梯、航向帶、速度/高度/AGL/VS、油門、模擬電池電壓、返航、導航、警告；H 鍵切換 | 版面位置需在畫面上確認 |
 | 搬運（抓取/放下） | 部分完成（待實測） | `DronePickupHandler.cs`、`DroneCargo.cs`：平滑吸附、貨物碰撞代理、範圍提示、耐久與事件 | — |
 | 搬運任務規則 | 部分完成（待實測） | `Scripts/Gameplay/DeliveryMissionManager.cs`、`DeliveryZone.cs` | 送貨點分佈需實測調整 |
-| 競速（檢查點/計時） | 部分完成（待實測） | `GameManager.cs`、`CourseBuilder.cs`(RingTrigger)、`RaceManger.cs`、`CityGenerator.cs` | — |
+| 競速（檢查點/計時） | 部分完成（CityResidential Play Mode 數據：25 個檢查圈、相鄰方向變化 ≤34°、間距 7.6–21m、高度 3.2–14.7m 錯落、無連線） | `GameManager.cs`、`CourseBuilder.cs`(RingTrigger)、`Gameplay/RaceCourseLayout.cs`、`RaceManger.cs`、`CityGenerator.cs`（D-019、D-020） | 完整跑完一圈未實測；難度需試飛調整 |
+| HUD 設置按鈕 / ESC | 部分完成（Play Mode 截圖確認按鈕位於上方中央） | `DroneFlightHUD.cs`、`OptionsMenu.cs` | ESC 開關與暫停待手動按鍵確認 |
+| 炸彈無人機投彈 | 部分完成（CityResidential Play Mode 確認：爆炸、4 輛車燒毀、1 名路人倒地，War FX 火焰黑煙在 URP 正常顯示；投彈/隱藏機腹炸彈/裝填開始正常） | `Script_1/DroneBombDropper.cs`、`Gameplay/Bombing.cs`、`Prefabs/Bomb.prefab`、`Resources/GameplayAssets.asset` | 實際按 B 鍵投彈未以真實按鍵測試 |
+| 空中飛機障礙 | 部分完成（0.5 倍尺寸；CityResidential 沿街道上空低飛，最低約離地 22m，距最近檢查圈 10m） | `Level/AircraftTraffic.cs`、`CityGenerator.GetStreetLoops` | 撞機手感待實測 |
+| 街道設施碰撞體 | 已修正（CityResidential 236、CityDowntown 540、OrganicCityTest 443 個設施改為 MeshCollider） | `CityGenerator.TaiwanStreets.cs`（FitPropColliders） | — |
 | 開場倒數 | 部分完成（待實測） | `GameManager.StartSequence` | — |
 | 結算畫面與排行榜 | 部分完成（待實測） | `UI/ResultScreen.cs`、`Gameplay/LeaderboardStore.cs`（本機 PlayerPrefs） | 玩家名稱輸入（目前自動以無人機名稱命名） |
 | 模式/關卡選擇面板 | 部分完成（待實測） | `UI/ModeSelectPanel.cs`、`UIPlayerSelectCtrl.EnterStage` | — |
@@ -57,6 +61,9 @@
 
 ## 4. 最近完成的工作
 
+- 2026-10-20：City2 移到世界中心 (路面 y=0)，以選單 10 工具加入路燈 30、行道樹 21、街道設施 41、停車場車輛 30、空地植物 165（D-023）；飛控反應加快與水平速度輔助（D-021、D-022）
+- 2026-10-20：檢查圈連貫配置（轉彎加密、錯落、貼近障礙、取消連線、縮小）、炸彈衝擊波上限與殘留火焰、撞擊引爆、炸彈無人機機動性、低空小飛機（D-020）
+- 2026-10-19：擬真飛控（D-018）；設置按鈕/ESC、ring target 20 檢查圈與連線、City2 完整賽道、炸彈投彈與爆炸傷害、空中飛機、街道設施碰撞修正（D-019）
 - 2026-10-13：CityProcedural 台灣街景、車流（汽車/紅綠燈）、路人（待 Unity 實測）
 - 2026-10-12：飛控手感、防吸附、TPV 穩定鏡頭、擬真 OSD、搬運優化、模式/關卡選擇、倒數/結算/排行、搬運任務、音效服務、程序化城市與兩個新關卡、DOTween UI（皆待實測）
 
@@ -75,6 +82,7 @@
 
 | 日期 | 檢查項目 | 結果 | 限制／備註 |
 |---|---|---|---|
+| 2026-10-19 | 擬真飛控（CityResidential，Drone_Parent Variant，Play Mode 以模擬鍵盤輸入取數據） | Unity 編譯 0 錯誤；懸停 2000 RPM、爬升/前進時 ~2410 RPM；升降速度、極速與煞車符合設定 | 只用數值驗證，未目視螺旋槳；Drone_Bomb 未在 Play Mode 實測；Console 僅既有 XRDeviceSimulatorUI NullReference |
 | 2026-10-14 | Editor 內連續載入 5 個場景（SceneLoader 計時） | 讀取約 0.9–1.4s（含 0.9s 最短顯示）；啟用 0.65–2.2s；市中心固定場景啟用比執行時生成快 | Editor 內數據受 Editor/MCP 負載影響，兩輪差異大；建置版效能待測 |
 | 2026-10-13 | Unity Play Mode（CityProcedural，4×4 街區） | 無新錯誤；48 輛車、64 位路人、停車場正常 | Editor 內 CPU 約 42–54ms/幀（關閉城市時約 23ms，含 Editor 與 MCP 開銷），建置版效能待測；Console 中 XRDeviceSimulatorUI 的 NullReference 與無人機 LED 負縮放碰撞體警告為既有問題 |
 | 2026-10-13 | dotnet 編譯 Assembly-CSharp / Assembly-CSharp-Editor（含新增 4 個檔案） | 0 錯誤、無新增警告 | Unity Editor 當時未回應 MCP（逾時），Editor.log 仍顯示寫檔途中的舊錯誤 `CityGrid` 找不到，需切回 Unity 重新編譯 |

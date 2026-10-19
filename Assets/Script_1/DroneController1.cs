@@ -25,8 +25,18 @@ public class DroneController1 : MonoBehaviour
 
     [Header("【核心動力與定高 (Core Physics)】")]
     [SerializeField] private float maxThrust = 40f;
+    [Tooltip("垂直速度控制增益 (每秒)，油門回中時即為定高強度")]
     [SerializeField] private float altitudeHoldStrength = 5f;
-    [SerializeField] private float horizontalSpeedBoost = 10f;
+    [Tooltip("街機式水平推力輔助 (非物理)，擬真飛行請設為 0")]
+    [SerializeField] private float horizontalSpeedBoost = 0f;
+    [Tooltip("油門推滿時的最大爬升速度 (m/s)，消費級無人機約 4~6")]
+    [SerializeField] private float maxClimbRate = 5f;
+    [Tooltip("油門拉到底時的最大下降速度 (m/s)，實機多限制在 3 左右以避免渦環狀態")]
+    [SerializeField] private float maxDescentRate = 3f;
+    [Tooltip("垂直加減速上限 (m/s²)，避免油門一推就瞬間彈射")]
+    [SerializeField] private float maxVerticalAcceleration = 6f;
+    [Tooltip("馬達轉速反應時間常數 (秒)，模擬馬達加減速延遲")]
+    [SerializeField] private float motorResponseTime = 0.08f;
     [Min(0.1f)]
     [SerializeField] private float baseMass = 1f;
     [Min(0f)]
@@ -37,6 +47,8 @@ public class DroneController1 : MonoBehaviour
     [SerializeField] private float maxTiltAngle = 20f;
     [SerializeField] private float maxYawRate = 200f;
     [SerializeField] private float stabilizerStrength = 15f;
+    [Tooltip("剛體角阻尼 (原本固定 6，會讓姿態反應變慢)；主要阻尼改由 attitudeDamping 提供")]
+    [SerializeField] private float bodyAngularDamping = 2f;
     [Tooltip("姿態角速度阻尼 (D 項)，越大越不會過衝")]
     [SerializeField] private float attitudeDamping = 0.8f;
     [Tooltip("姿態控制整體增益 (原版程式重複施加兩次扭力，等同 2 倍)")]
@@ -55,6 +67,25 @@ public class DroneController1 : MonoBehaviour
     [SerializeField] private float payloadAgilityLoss = 0.35f;
     [Tooltip("空中氣流擾動強度 (m/s²)，0 = 關閉")]
     [SerializeField] private float turbulenceStrength = 0.25f;
+
+    [Header("【空氣阻力與煞車 (Aerodynamics & Braking)】")]
+    [Tooltip("線性阻力 (Rigidbody linearDamping)，主要影響低速")]
+    [SerializeField] private float linearDrag = 0.15f;
+    [Tooltip("機身二次方空氣阻力係數，決定極速 (傾角 30° 時約 11 m/s)")]
+    [SerializeField] private float quadraticDrag = 0.03f;
+
+    [Header("【水平速度輔助 (自平模式)】")]
+    [Tooltip("搖桿推滿時的目標水平速度 (m/s)")]
+    [SerializeField] private float maxHorizontalSpeed = 12f;
+    [Tooltip("追上目標速度的快慢 (1/秒)，越大前後左右反應越快、放開越快停")]
+    [SerializeField] private float horizontalResponse = 3f;
+    [Tooltip("水平加減速上限 (m/s²)")]
+    [SerializeField] private float maxHorizontalAccel = 12f;
+    [Tooltip("機身傾斜幅度 (相對於真實物理需要的角度)，越小越不傾斜；仍受 maxTiltAngle 限制")]
+    [Range(0f, 1f)]
+    [SerializeField] private float tiltVisualScale = 0.6f;
+    private Vector3 horizontalAssist;
+    private bool hasHorizontalAssist;
 
     [Header("【碰撞防吸附 (Anti-Stick)】")]
     [Tooltip("接觸牆面時往外推開的加速度 (m/s²)")]
@@ -75,7 +106,14 @@ public class DroneController1 : MonoBehaviour
     [SerializeField] private float propIdleRPM = 800f;
     [SerializeField] private float propHoverRPM = 2800f;
     [SerializeField] private float propMaxRPM = 3500f;
+    [Tooltip("每幀最大旋轉角度 (度)。低幀率時超過「槳葉間隔角」的一半會產生倒轉/靜止錯覺 (3 葉槳為 60°)")]
+    [SerializeField] private float propMaxStepDegrees = 35f;
+    [Tooltip("姿態力矩換算成各馬達轉速差的比例 (只影響視覺)")]
+    [SerializeField] private float mixerTorqueScale = 0.02f;
     private float currentVisualRpm = 0f;
+    private float[] propVisualRpm = new float[0];
+    private float[] propSpinDirections = new float[0];
+    private Vector3[] propLocalPositions = new Vector3[0];
     // 新增：當玩家按下重生鍵時，對外廣播的事件
     public event System.Action OnRespawnPressed;
 
@@ -145,6 +183,8 @@ public class DroneController1 : MonoBehaviour
 
     // --- 遙測數據 (供 HUD 與遊戲規則使用) ---
     private float lastThrustAcceleration;
+    private float lastAvailableThrust;
+    private Vector3 lastLocalTorque;
     private float altitudeAboveGround = -1f;
     private float batteryPercent = 100f;
     private float currentYawRate;
@@ -276,8 +316,9 @@ public class DroneController1 : MonoBehaviour
         rb.centerOfMass = Vector3.zero;
 
         rb.mass = baseMass + payloadMass;
-        rb.linearDamping = 1.0f;
-        rb.angularDamping = 6.0f;
+        // 低速線性阻力；高速的二次方空氣阻力在 ApplyAerodynamicDrag 中處理
+        rb.linearDamping = linearDrag;
+        rb.angularDamping = bodyAngularDamping;
         rb.useGravity = true;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
@@ -294,6 +335,7 @@ public class DroneController1 : MonoBehaviour
         }
 
         FindPropellers();
+        CachePropellerLayout();
         EnsureCameraPositions();
         CaptureThirdPersonOffset();
         InitializeCameras();
@@ -386,7 +428,10 @@ public class DroneController1 : MonoBehaviour
         else
         {
             lastThrustAcceleration = 0f;
+            lastLocalTorque = Vector3.zero;
         }
+
+        ApplyAerodynamicDrag();
 
         if (isTouchingWall)
         {
@@ -560,14 +605,18 @@ public class DroneController1 : MonoBehaviour
         rb.angularVelocity *= 0.85f;
     }
 
+    // 每幀射線檢測共用的緩衝區 (RaycastAll 每次都會配置陣列，累積 GC 造成畫面週期性卡頓)
+    private readonly RaycastHit[] rayHits = new RaycastHit[16];
+
     private void UpdateGroundedState()
     {
         bool hitGround = false;
         Ray ray = new Ray(transform.position + Vector3.up * 0.1f, Vector3.down);
-        RaycastHit[] hits = Physics.RaycastAll(ray, 0.35f, ~0, QueryTriggerInteraction.Ignore);
+        int count = Physics.RaycastNonAlloc(ray, rayHits, 0.35f, ~0, QueryTriggerInteraction.Ignore);
 
-        foreach (var h in hits)
+        for (int i = 0; i < count; i++)
         {
+            RaycastHit h = rayHits[i];
             if (!h.collider.transform.IsChildOf(transform) && h.collider.gameObject != gameObject)
             {
                 hitGround = true;
@@ -580,10 +629,11 @@ public class DroneController1 : MonoBehaviour
     private void UpdateAltitudeAboveGround()
     {
         altitudeAboveGround = -1f;
-        RaycastHit[] hits = Physics.RaycastAll(transform.position, Vector3.down, 200f, ~0, QueryTriggerInteraction.Ignore);
+        int count = Physics.RaycastNonAlloc(transform.position, Vector3.down, rayHits, 200f, ~0, QueryTriggerInteraction.Ignore);
         float closest = float.PositiveInfinity;
-        foreach (RaycastHit hit in hits)
+        for (int i = 0; i < count; i++)
         {
+            RaycastHit hit = rayHits[i];
             if (hit.collider.transform.IsChildOf(transform) || hit.distance >= closest) continue;
             closest = hit.distance;
         }
@@ -669,6 +719,7 @@ public class DroneController1 : MonoBehaviour
     private void ApplyFlightPhysics()
     {
         float fixedDt = Time.fixedDeltaTime;
+        hasHorizontalAssist = false;
         currentYawRate = Mathf.MoveTowards(currentYawRate, stickYaw * maxYawRate, yawAcceleration * fixedDt);
         targetYawAngle += currentYawRate * fixedDt;
         float payloadSpeedMultiplier = 1f / (1f + payloadMass / Mathf.Max(baseMass, 0.1f));
@@ -689,6 +740,28 @@ public class DroneController1 : MonoBehaviour
             targetPitchAngle = 0f;
             targetRollAngle = 0f;
         }
+        else if (!isGrounded)
+        {
+            // 速度輔助 (類似實機 GPS 模式)：搖桿決定目標水平速度，以有上限的加速度直接追上，
+            // 推桿立刻衝出去、放開立刻煞停。機身只朝加速方向小幅傾斜 (tiltVisualScale)，不再靠大傾角產生推力。
+            Quaternion yaw = Quaternion.Euler(0f, targetYawAngle, 0f);
+            Vector3 flatVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
+            float pitchCommand = targetPitchAngle / Mathf.Max(maxTiltAngle, 1f); // +1 = 往前
+            float rollCommand = targetRollAngle / Mathf.Max(maxTiltAngle, 1f);   // +1 = 往左
+            Vector3 desiredVelocity = yaw * new Vector3(-rollCommand, 0f, pitchCommand) * (maxHorizontalSpeed * agility);
+            Vector3 desiredAccel = Vector3.ClampMagnitude((desiredVelocity - flatVelocity) * horizontalResponse, maxHorizontalAccel * agility);
+
+            // 加上空氣阻力的補償，實際速度才追得到目標
+            float massRatio = Mathf.Max(baseMass, 0.1f) / Mathf.Max(baseMass + payloadMass, 0.1f);
+            Vector3 dragAccel = flatVelocity * (flatVelocity.magnitude * quadraticDrag * massRatio + linearDrag);
+            horizontalAssist = desiredAccel + dragAccel;
+            hasHorizontalAssist = true;
+
+            Vector3 localAccel = Quaternion.Inverse(yaw) * horizontalAssist;
+            float gravity = Mathf.Abs(Physics.gravity.y);
+            targetPitchAngle = Mathf.Clamp(Mathf.Atan2(localAccel.z, gravity) * Mathf.Rad2Deg * tiltVisualScale, -maxTiltAngle, maxTiltAngle);
+            targetRollAngle = Mathf.Clamp(Mathf.Atan2(-localAccel.x, gravity) * Mathf.Rad2Deg * tiltVisualScale, -maxTiltAngle, maxTiltAngle);
+        }
 
         Quaternion targetRotation = Quaternion.Euler(targetPitchAngle, targetYawAngle, targetRollAngle);
         Quaternion errorRotation = targetRotation * Quaternion.Inverse(transform.rotation);
@@ -702,35 +775,51 @@ public class DroneController1 : MonoBehaviour
         }
         Vector3 correctionTorque = (axis.normalized * (angle * stabilizerStrength * agility * Mathf.Deg2Rad)) - (rb.angularVelocity * attitudeDamping);
         rb.AddTorque(correctionTorque * attitudeGain, ForceMode.Acceleration);
+        lastLocalTorque = transform.InverseTransformDirection(correctionTorque * attitudeGain);
 
         float gravityForce = Mathf.Abs(Physics.gravity.y);
         float tiltAngle = Vector3.Angle(Vector3.up, transform.up);
         float tiltCompensation = 1f / Mathf.Max(Mathf.Cos(tiltAngle * Mathf.Deg2Rad), 0.3f);
-        float hoverThrust = gravityForce * tiltCompensation;
 
-        float finalThrust = 0f;
+        // 馬達推力固定，載重越重可用加速度越低
+        float availableThrust = maxThrust * payloadSpeedMultiplier;
+        lastAvailableThrust = availableThrust;
 
-        if (Mathf.Abs(stickThrottle) > 0.05f)
+        // 油門控制「目標垂直速度」(實機飛控的定高/升降模式)，回中即定高
+        float commandedThrust = 0f;
+        bool throttleActive = Mathf.Abs(stickThrottle) > 0.05f;
+        if (!isGrounded || stickThrottle > 0.05f)
         {
-            if (stickThrottle > 0)
-                finalThrust = Mathf.Lerp(hoverThrust, maxThrust, stickThrottle) * payloadSpeedMultiplier;
-            else
-                finalThrust = Mathf.Lerp(hoverThrust, 0f, -stickThrottle);
-        }
-        else
-        {
-            if (!isGrounded)
+            float targetClimbRate = 0f;
+            if (throttleActive)
             {
-                float verticalVelocity = rb.linearVelocity.y;
-                finalThrust = hoverThrust - (verticalVelocity * altitudeHoldStrength);
+                float throttle = Mathf.Sign(stickThrottle) * (Mathf.Abs(stickThrottle) - 0.05f) / 0.95f;
+                targetClimbRate = throttle * (throttle > 0f ? maxClimbRate : maxDescentRate);
             }
-        }
 
-        lastThrustAcceleration = finalThrust;
+            float verticalAccel = Mathf.Clamp(
+                (targetClimbRate - rb.linearVelocity.y) * altitudeHoldStrength,
+                -maxVerticalAcceleration,
+                maxVerticalAcceleration);
+            commandedThrust = (gravityForce + verticalAccel) * tiltCompensation;
+        }
+        commandedThrust = Mathf.Clamp(commandedThrust, 0f, availableThrust);
+
+        // 馬達加減速延遲
+        float motorBlend = motorResponseTime > 0f ? 1f - Mathf.Exp(-fixedDt / motorResponseTime) : 1f;
+        lastThrustAcceleration = Mathf.Lerp(lastThrustAcceleration, commandedThrust, motorBlend);
+        float finalThrust = lastThrustAcceleration;
 
         Vector3 horizontalDirection = new Vector3(transform.up.x, 0, transform.up.z);
         Vector3 propulsion = transform.up * finalThrust
                              + horizontalDirection * horizontalSpeedBoost * payloadSpeedMultiplier;
+
+        if (hasHorizontalAssist)
+        {
+            // 速度輔助：補足「傾斜推力的水平分量」與目標加速度之間的差 (機身傾斜較小，主要由這裡提供加減速)
+            Vector3 thrustHorizontal = new Vector3(propulsion.x, 0f, propulsion.z);
+            propulsion += horizontalAssist - thrustHorizontal;
+        }
 
         // 撞牆時只移除「朝牆內」的推力分量，仍可沿牆滑開或後退脫離，不會被推力壓在牆上
         if (isTouchingWall && accumulatedWallNormal.sqrMagnitude > 0.0001f)
@@ -760,6 +849,19 @@ public class DroneController1 : MonoBehaviour
                 Mathf.PerlinNoise(turbulenceSeed + 67f, t) - 0.5f);
             rb.AddForce(gust * (2f * turbulenceStrength), ForceMode.Acceleration);
         }
+    }
+
+    /// <summary>
+    /// 二次方空氣阻力：速度越快阻力越大，取代原本固定的 linearDamping，讓極速與滑行距離接近實機
+    /// </summary>
+    private void ApplyAerodynamicDrag()
+    {
+        if (quadraticDrag <= 0f) return;
+
+        // 阻力是力，載重越重減速越慢
+        float massRatio = Mathf.Max(baseMass, 0.1f) / Mathf.Max(baseMass + payloadMass, 0.1f);
+        Vector3 velocity = rb.linearVelocity;
+        rb.AddForce(-velocity * velocity.magnitude * quadraticDrag * massRatio, ForceMode.Acceleration);
     }
 
     private void ToggleInvertControls()
@@ -800,37 +902,69 @@ public class DroneController1 : MonoBehaviour
         }
     }
 
-    private void UpdatePropellersVisual()
+    /// <summary>
+    /// 記錄每顆螺旋槳相對機身的位置與轉向，供馬達混控 (Mixer) 計算各自轉速
+    /// </summary>
+    private void CachePropellerLayout()
     {
-        float targetRpm = 0f;
-        if (isArmed)
-        {
-            if (isGrounded)
-            {
-                targetRpm = propIdleRPM;
-            }
-            else
-            {
-                if (stickThrottle > 0)
-                    targetRpm = Mathf.Lerp(propHoverRPM, propMaxRPM, stickThrottle);
-                else if (stickThrottle < 0)
-                    targetRpm = Mathf.Lerp(propHoverRPM, propIdleRPM, -stickThrottle);
-                else
-                    targetRpm = propHoverRPM;
-            }
-        }
+        int count = propellers != null ? propellers.Length : 0;
+        float[] defaultDirections = { 1f, -1f, -1f, 1f }; // 對角線同向，與原本視覺一致
+        propVisualRpm = new float[count];
+        propSpinDirections = new float[count];
+        propLocalPositions = new Vector3[count];
 
-        currentVisualRpm = Mathf.Lerp(currentVisualRpm, targetRpm, Time.deltaTime * 8f);
-        float[] directions = { 1f, -1f, -1f, 1f };
-
-        for (int i = 0; i < propellers.Length; i++)
+        for (int i = 0; i < count; i++)
         {
+            propSpinDirections[i] = defaultDirections[i % defaultDirections.Length];
             if (propellers[i] != null)
             {
-                Vector3 rotationAxis = Vector3.forward;
-                propellers[i].transform.Rotate(rotationAxis * currentVisualRpm * directions[i] * Time.deltaTime);
+                propLocalPositions[i] = transform.InverseTransformPoint(propellers[i].transform.position);
             }
         }
+    }
+
+    private void UpdatePropellersVisual()
+    {
+        if (propellers == null) return;
+        if (propVisualRpm.Length != propellers.Length) CachePropellerLayout();
+
+        float dt = Time.deltaTime;
+        // 推力與轉速平方成正比：以懸停轉速為基準換算
+        float hoverFraction = lastAvailableThrust > 0f ? Mathf.Abs(Physics.gravity.y) / lastAvailableThrust : 0.25f;
+        float collective = lastAvailableThrust > 0f ? lastThrustAcceleration / lastAvailableThrust : 0f;
+        // 解鎖後轉速跟隨馬達反應時間；熄火後螺旋槳靠慣性慢慢停下
+        float spinTimeConstant = isArmed ? Mathf.Max(motorResponseTime, 0.02f) : 0.6f;
+        float spinBlend = 1f - Mathf.Exp(-dt / spinTimeConstant);
+
+        // 低幀率時限制每幀轉角，避免車輪效應 (看起來倒轉或靜止)；轉速差異仍按比例呈現
+        float visualDt = Mathf.Min(dt, propMaxStepDegrees / Mathf.Max(propMaxRPM, 1f));
+
+        float rpmSum = 0f;
+        for (int i = 0; i < propellers.Length; i++)
+        {
+            float targetRpm = 0f;
+            if (isArmed)
+            {
+                // 四軸 X 型混控：前傾時後方馬達加速、右滾時左側加速、偏航時同轉向的一對加速
+                Vector3 p = propLocalPositions[i];
+                float mix = collective + mixerTorqueScale * (
+                    -Mathf.Sign(p.z) * lastLocalTorque.x
+                    + Mathf.Sign(p.x) * lastLocalTorque.z
+                    - propSpinDirections[i] * lastLocalTorque.y);
+                float rpm = propHoverRPM * Mathf.Sqrt(Mathf.Max(mix, 0f) / Mathf.Max(hoverFraction, 0.01f));
+                targetRpm = Mathf.Clamp(rpm, propIdleRPM, propMaxRPM);
+            }
+
+            propVisualRpm[i] = Mathf.Lerp(propVisualRpm[i], targetRpm, spinBlend);
+            rpmSum += propVisualRpm[i];
+
+            if (propellers[i] != null)
+            {
+                propellers[i].transform.Rotate(Vector3.forward * propVisualRpm[i] * propSpinDirections[i] * visualDt);
+            }
+        }
+
+        currentVisualRpm = propellers.Length > 0 ? rpmSum / propellers.Length : 0f;
     }
 
     /// <summary>
@@ -1115,6 +1249,9 @@ public class DroneController1 : MonoBehaviour
         Vector3 pos = transform.position;
         float yaw = transform.eulerAngles.y;
 
+        // 舊版數據面板被擬真 OSD 取代時 (物件未啟用) 不必每幀組字串
+        if (statusText != null && !statusText.isActiveAndEnabled) return;
+
         if (statusText != null)
         {
             statusText.text = $"Status:    {(isFlying ? "FLYING" : "GROUNDED")}";
@@ -1151,6 +1288,8 @@ public class DroneController1 : MonoBehaviour
         stickRoll = 0f;
         stickYaw = 0f;
         currentYawRate = 0f;
+        lastThrustAcceleration = Mathf.Abs(Physics.gravity.y); // 空中重生時馬達已在懸停轉速，不會先掉一下
+        lastLocalTorque = Vector3.zero;
         accumulatedWallNormal = Vector3.zero;
         wallContactCount = 0;
         isTouchingWall = false;

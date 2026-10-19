@@ -30,6 +30,10 @@ public class DroneFlightHUD : MonoBehaviour
     [SerializeField] private float sideColumnOffset = 150f;
     [Tooltip("OSD 上下列與畫面中心的垂直距離")]
     [SerializeField] private float topBottomOffset = 112f;
+    [Tooltip("設置按鈕與畫面中心的垂直距離 (OSD 座標，位於航向帶上方)")]
+    [SerializeField] private float settingsButtonHeight = 138f;
+    [Tooltip("設置按鈕往右偏移 (OSD 座標)，避開正中央的航向帶與導航提示")]
+    [SerializeField] private float settingsButtonOffsetX = 125f;
     [SerializeField] private Color warningColor = new Color(1f, 0.32f, 0.25f, 1f);
     [SerializeField] private Color cautionColor = new Color(1f, 0.85f, 0.2f, 1f);
 
@@ -55,11 +59,23 @@ public class DroneFlightHUD : MonoBehaviour
     private Image throttleFill;
     private Image batteryFill;
     private RectTransform navArrow;
+    private RectTransform headingStrip;
     private RectTransform homeArrow;
     private GameObject legacyPanel;
 
     private DronePickupHandler pickupHandler;
+    private DroneBombDropper bombDropper;
     private InputAction toggleOsdAction;
+
+    // --- 效能：文字以固定頻率更新、只在內容改變時重設 (避免每幀重建 Canvas 與產生 GC) ---
+    private const float TextUpdateInterval = 1f / 12f;
+    private float textTimer;
+    private int shownHeading = -1;
+    private readonly int[] shownHeadingLabels = { -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+    private readonly RaycastHit[] obstacleHits = new RaycastHit[8];
+    private float feedCheckTimer;
+    private Camera[] feedCameras;
+    private RawImage[] feedDisplays;
     private float crashFlashTimer;
     private float airborneTime;
     private string lastWarning = string.Empty;
@@ -81,18 +97,32 @@ public class DroneFlightHUD : MonoBehaviour
 
         toggleOsdAction = new InputAction("ToggleOSD", binding: "<Keyboard>/h");
         toggleOsdAction.AddBinding("<Gamepad>/select");
+
+        toggleSettingsAction = new InputAction("ToggleSettings", binding: "<Keyboard>/escape");
+        toggleSettingsAction.AddBinding("<Gamepad>/start");
     }
+
+    private InputAction toggleSettingsAction;
 
     private void OnEnable()
     {
         toggleOsdAction?.Enable();
+        toggleSettingsAction?.Enable();
         if (droneController != null) droneController.OnCrash += HandleCrash;
+        HandlesEscape = true;
     }
 
     private void OnDisable()
     {
         toggleOsdAction?.Disable();
+        toggleSettingsAction?.Disable();
         if (droneController != null) droneController.OnCrash -= HandleCrash;
+        HandlesEscape = false;
+        if (pausedBySettings)
+        {
+            pausedBySettings = false;
+            Time.timeScale = 1f;
+        }
     }
 
     private void Start()
@@ -123,6 +153,12 @@ public class DroneFlightHUD : MonoBehaviour
             ApplyOsdVisibility();
         }
 
+        if (toggleSettingsAction != null && toggleSettingsAction.WasPressedThisFrame())
+        {
+            ToggleSettings();
+        }
+        SyncSettingsPause();
+
         bool isFirstPerson = droneController.IsFirstPerson;
         firstPersonRoot.SetActive(isFirstPerson);
 
@@ -137,13 +173,75 @@ public class DroneFlightHUD : MonoBehaviour
 
         if (osdRoot == null || !osdRoot.activeSelf) return;
 
-        UpdatePitchLadder(pitchUp, rollRight, isFirstPerson);
-        UpdateVelocityMarker(view, isFirstPerson);
-        UpdateHeadingTape(view);
-        UpdateTelemetry();
-        UpdateNavigation(view);
-        UpdateCargo();
-        UpdateWarnings();
+        bool flying = droneController.IsEngineStarted && !droneController.isGrounded;
+        if (flying) airborneTime += Time.deltaTime;
+        crashFlashTimer -= Time.deltaTime;
+
+        textTimer -= Time.deltaTime;
+        bool textFrame = textTimer <= 0f;
+
+        // 第一人稱：俯仰梯與航向帶每幀更新 (需跟著畫面轉動)。
+        // 第三人稱：OSD 只是資訊顯示，整個 OSD 降頻更新——世界空間 HUD 每幀變動會讓整張 Canvas
+        // 重新處理並大量配置記憶體，轉彎時造成週期性卡頓。
+        if (isFirstPerson || textFrame)
+        {
+            UpdatePitchLadder(pitchUp, rollRight, isFirstPerson);
+            UpdateVelocityMarker(view, isFirstPerson);
+            UpdateHeadingTape(view);
+            UpdateNavigationArrows(view);
+            UpdateBlink();
+        }
+
+        if (textFrame)
+        {
+            textTimer = TextUpdateInterval;
+            UpdateTelemetry();
+            UpdateNavigation(view);
+            UpdateCargo();
+            UpdateWarnings();
+        }
+
+        feedCheckTimer -= Time.deltaTime;
+        if (feedCheckTimer <= 0f)
+        {
+            feedCheckTimer = 0.5f;
+            UpdateFeedCameras();
+        }
+    }
+
+    /// <summary>只在內容改變時才設定文字 (TMP 每次設定都會重建網格)</summary>
+    private static void SetText(TextMeshProUGUI target, string value)
+    {
+        if (target != null && target.text != value) target.text = value;
+    }
+
+    /// <summary>
+    /// 機身前視相機只在畫面上有顯示它的 RawImage 時才渲染；
+    /// 否則每幀多畫一次整個城市卻沒人看到。
+    /// </summary>
+    private void UpdateFeedCameras()
+    {
+        // 只在第一次搜尋 (全場景搜尋很慢，週期性呼叫會造成卡頓)
+        if (feedCameras == null)
+        {
+            feedCameras = droneController.GetComponentsInChildren<Camera>(true);
+            feedDisplays = GetComponentsInChildren<RawImage>(true);
+        }
+
+        foreach (Camera feedCamera in feedCameras)
+        {
+            if (feedCamera == null || feedCamera.targetTexture == null) continue;
+            bool displayed = false;
+            foreach (RawImage image in feedDisplays)
+            {
+                if (image != null && image.texture == feedCamera.targetTexture && image.isActiveAndEnabled)
+                {
+                    displayed = true;
+                    break;
+                }
+            }
+            if (feedCamera.enabled != displayed) feedCamera.enabled = displayed;
+        }
     }
 
     #region 既有元素 (人工地平線 / 操作說明)
@@ -253,9 +351,13 @@ public class DroneFlightHUD : MonoBehaviour
         RectTransform headingWindow = RuntimeUI.CreateCentered("HeadingTape", root, new Vector2(0f, topY), new Vector2(200f, 18f));
         headingWindow.gameObject.AddComponent<RectMask2D>();
         RuntimeUI.CreateImage("HeadingTapeBG", headingWindow, Vector2.zero, new Vector2(200f, 18f), new Color(0f, 0f, 0f, 0.25f));
+        // 標籤固定排在一條帶子上，每幀只移動帶子 (移動個別 TMP 會讓它們每幀重建網格並產生 GC)
+        headingStrip = RuntimeUI.CreateCentered("HeadingStrip", headingWindow, Vector2.zero, new Vector2(200f, 18f));
+        int halfCount = headingLabels.Length / 2;
         for (int i = 0; i < headingLabels.Length; i++)
         {
-            headingLabels[i] = RuntimeUI.CreateText($"HeadingLabel{i}", headingWindow, "", osdFontSize * 0.85f, Vector2.zero, new Vector2(30f, 16f));
+            headingLabels[i] = RuntimeUI.CreateText($"HeadingLabel{i}", headingStrip, "", osdFontSize * 0.85f,
+                new Vector2((i - halfCount) * 15f * headingPixelsPerDegree, 0f), new Vector2(30f, 16f));
             headingLabels[i].color = horizonColor;
         }
         Image caret = RuntimeUI.CreateImage("HeadingCaret", root, new Vector2(0f, topY - 14f), new Vector2(8f, 6f), horizonColor, RuntimeUI.TriangleSprite);
@@ -304,6 +406,128 @@ public class DroneFlightHUD : MonoBehaviour
         cargoText.color = cautionColor;
 
         legacyPanel = FindDeepChild(transform, "LeftPanel")?.gameObject;
+
+        // 動態元素放在子 Canvas：文字/位置變動時只重建子 Canvas，不影響整個 HUD
+        AddNestedCanvas(osdRoot);
+        AddNestedCanvas(firstPersonRoot);
+        ArrangeLegacyElements();
+    }
+
+    private static void AddNestedCanvas(GameObject target)
+    {
+        if (target != null && target.GetComponent<Canvas>() == null) target.AddComponent<Canvas>();
+    }
+
+    /// <summary>
+    /// 既有 HUD 元素重新排版，避免與 OSD 重疊：
+    /// 競速計時放左上、檢查點進度放右上 (原本被失效的版面配置疊在航向帶與下方狀態列上)，
+    /// 設置按鈕移到左下角 (原本壓在電量文字上)。
+    /// </summary>
+    private void ArrangeLegacyElements()
+    {
+        Transform rightPanel = FindDeepChild(transform, "RightPanel");
+        if (rightPanel != null)
+        {
+            LayoutGroup layout = rightPanel.GetComponent<LayoutGroup>();
+            if (layout != null) layout.enabled = false;
+            AddNestedCanvas(rightPanel.gameObject);
+            PlaceLegacyText(FindDeepChild(rightPanel, "TimerText"), new Vector2(-osdScale * 150f, osdScale * 100f), TextAlignmentOptions.Left);
+            PlaceLegacyText(FindDeepChild(rightPanel, "ProgressText"), new Vector2(osdScale * 150f, osdScale * 100f), TextAlignmentOptions.Right);
+        }
+
+        Transform settingsButton = null;
+        foreach (Transform child in transform)
+        {
+            if (child.name.Contains("設置") && child.GetComponent<Button>() != null) settingsButton = child;
+        }
+        if (settingsButton != null)
+        {
+            // 放在畫面右上方 (檢查點進度上面)，避開中央的航向帶與導航提示；加大並標示 ESC 快捷鍵
+            RectTransform rect = (RectTransform)settingsButton;
+            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = new Vector2(osdScale * settingsButtonOffsetX, osdScale * settingsButtonHeight);
+            rect.sizeDelta = new Vector2(150f, 34f);
+            Button button = settingsButton.GetComponent<Button>();
+            ControlsHelp.StyleButton(button, "<sprite name=\"esc\"> 設置");
+            Image image = button.targetGraphic as Image;
+            if (image != null) image.color = new Color(0.05f, 0.35f, 0.32f, 0.92f);
+            TextMeshProUGUI label = settingsButton.GetComponentInChildren<TextMeshProUGUI>(true);
+            if (label != null)
+            {
+                label.fontSize = 20f;
+                label.alignment = TextAlignmentOptions.Center;
+                label.textWrappingMode = TextWrappingModes.NoWrap;
+            }
+            AddNestedCanvas(settingsButton.gameObject);
+        }
+
+        settingsPanel = FindDeepChild(transform, "[Panel]設置")?.gameObject;
+    }
+
+    #region 設置面板 (ESC)
+
+    /// <summary>有無人機 HUD 設置面板時，ESC 由 HUD 處理 (OptionsMenu 不再顯示自己的暫停選單)</summary>
+    public static bool HandlesEscape { get; private set; }
+
+    private GameObject settingsPanel;
+    private bool pausedBySettings;
+
+    /// <summary>ESC / 手把 Start：開啟或關閉設置面板</summary>
+    public void ToggleSettings()
+    {
+        if (settingsPanel == null) return;
+        UIPopupPanel popup = settingsPanel.GetComponent<UIPopupPanel>();
+        bool open = IsSettingsOpen();
+        if (popup != null)
+        {
+            if (open) popup.Hide();
+            else popup.Show();
+        }
+        else
+        {
+            settingsPanel.SetActive(!open);
+        }
+    }
+
+    private bool IsSettingsOpen()
+    {
+        if (settingsPanel == null || !settingsPanel.activeInHierarchy) return false;
+        UIPopupPanel popup = settingsPanel.GetComponent<UIPopupPanel>();
+        return popup == null || popup.IsOpen;
+    }
+
+    /// <summary>面板開著時暫停遊戲 (按鈕、ESC 開關都適用)，關閉時恢復</summary>
+    private void SyncSettingsPause()
+    {
+        bool open = IsSettingsOpen();
+        if (open == pausedBySettings) return;
+        pausedBySettings = open;
+        Time.timeScale = open ? 0f : 1f;
+    }
+
+    #endregion
+
+    private void PlaceLegacyText(Transform target, Vector2 canvasPosition, TextAlignmentOptions alignment)
+    {
+        if (target == null) return;
+        RectTransform rect = (RectTransform)target;
+        RectTransform canvasRect = (RectTransform)transform;
+        // 改以 Canvas 中心為基準定位 (先換算父物件的偏移)
+        Vector3 worldCenter = canvasRect.TransformPoint(canvasRect.rect.center);
+        rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(alignment == TextAlignmentOptions.Left ? 0f : 1f, 0.5f);
+        rect.sizeDelta = new Vector2(140f, 20f);
+        rect.position = worldCenter + canvasRect.TransformVector(new Vector3(
+            canvasPosition.x + (alignment == TextAlignmentOptions.Left ? -70f : 70f), canvasPosition.y, 0f));
+        TextMeshProUGUI text = target.GetComponent<TextMeshProUGUI>();
+        if (text != null)
+        {
+            text.alignment = alignment;
+            text.fontSize = osdFontSize * osdScale;
+            text.textWrappingMode = TextWrappingModes.NoWrap;
+            text.color = horizonColor;
+        }
     }
 
     private TextMeshProUGUI CreateDataBox(string objectName, Transform parent, Vector2 position, TextAlignmentOptions alignment)
@@ -340,7 +564,7 @@ public class DroneFlightHUD : MonoBehaviour
 
         Vector3 localVelocity = view.InverseTransformDirection(droneController.Velocity);
         bool visible = localVelocity.z > 0.5f && droneController.Velocity.magnitude > 1f;
-        velocityMarker.gameObject.SetActive(visible);
+        if (velocityMarker.gameObject.activeSelf != visible) velocityMarker.gameObject.SetActive(visible);
         if (!visible) return;
 
         float x = Mathf.Atan2(localVelocity.x, localVelocity.z) * Mathf.Rad2Deg * pitchPixelsPerDegree;
@@ -351,110 +575,136 @@ public class DroneFlightHUD : MonoBehaviour
     private void UpdateHeadingTape(Transform view)
     {
         float heading = HeadingOf(view.forward);
-        headingValueText.text = $"{Mathf.RoundToInt(heading) % 360:000}°";
+        int roundedHeading = Mathf.RoundToInt(heading) % 360;
+        if (roundedHeading != shownHeading)
+        {
+            shownHeading = roundedHeading;
+            headingValueText.text = $"{roundedHeading:000}°";
+        }
 
         float baseValue = Mathf.Round(heading / 15f) * 15f;
         int half = headingLabels.Length / 2;
+        headingStrip.anchoredPosition = new Vector2(Mathf.DeltaAngle(heading, baseValue) * headingPixelsPerDegree, 0f);
         for (int i = 0; i < headingLabels.Length; i++)
         {
             float value = baseValue + (i - half) * 15f;
-            float x = Mathf.DeltaAngle(heading, value) * headingPixelsPerDegree;
-            headingLabels[i].rectTransform.anchoredPosition = new Vector2(x, 0f);
-            headingLabels[i].text = HeadingLabel(Mathf.RoundToInt(Mathf.Repeat(value, 360f)) % 360);
+            int labelValue = Mathf.RoundToInt(Mathf.Repeat(value, 360f)) % 360;
+            if (shownHeadingLabels[i] != labelValue)
+            {
+                shownHeadingLabels[i] = labelValue;
+                headingLabels[i].text = HeadingLabel(labelValue);
+            }
         }
     }
 
     private void UpdateTelemetry()
     {
         float groundSpeed = droneController.GroundSpeed;
-        speedText.text = $"<size=70%>SPD</size>\n{groundSpeed:0.0}<size=60%> m/s</size>\n<size=70%>{groundSpeed * 3.6f:0} km/h</size>";
+        SetText(speedText, $"<size=70%>SPD</size>\n{groundSpeed:0.0}<size=60%> m/s</size>\n<size=70%>{groundSpeed * 3.6f:0} km/h</size>");
 
         float altitude = droneController.RelativeAltitude;
         float agl = droneController.AltitudeAboveGround;
         float vs = droneController.VerticalSpeed;
         string vsSign = vs >= 0f ? "+" : "-";
         string aglText = agl >= 0f ? $"{agl:0.0}" : "---";
-        altitudeText.text = $"<size=70%>ALT</size>\n{altitude:0.0}<size=60%> m</size>\n<size=70%>AGL {aglText}  VS {vsSign}{Mathf.Abs(vs):0.0}</size>";
+        SetText(altitudeText, $"<size=70%>ALT</size>\n{altitude:0.0}<size=60%> m</size>\n<size=70%>AGL {aglText}  VS {vsSign}{Mathf.Abs(vs):0.0}</size>");
 
         float throttle = droneController.Throttle01;
         throttleFill.rectTransform.sizeDelta = new Vector2(5f, 60f * throttle);
         throttleFill.color = throttle > 0.9f ? cautionColor : horizonColor;
 
-        bool flying = droneController.IsEngineStarted && !droneController.isGrounded;
-        if (flying) airborneTime += Time.deltaTime;
-        timerText.text = $"T {RuntimeUI.FormatTime(airborneTime).Substring(0, 5)}";
+        SetText(timerText, $"T {RuntimeUI.FormatTime(airborneTime).Substring(0, 5)}");
 
         string armState = droneController.IsEngineStarted ? "<color=#33FF99>ARMED</color>" : "<color=#FF5544>DISARMED</color>";
         string invert = droneController.isInverted ? "  INV" : string.Empty;
         string view = droneController.IsFirstPerson ? "FPV" : "TPV";
-        statusText.text = $"{armState}  {droneController.FlightModeLabel}  THR {throttle * 100f:0}%  {view}{invert}";
+        SetText(statusText, $"{armState}  {droneController.FlightModeLabel}  THR {throttle * 100f:0}%  {view}{invert}");
 
         float battery = droneController.BatteryPercent;
         // 模擬 4S 鋰電：滿電 16.8V，空電 14.0V，大油門時電壓下降
         float voltage = Mathf.Lerp(14.0f, 16.8f, battery / 100f) - throttle * 0.6f;
         Color batteryColor = battery < 15f ? warningColor : battery < 30f ? cautionColor : horizonColor;
-        batteryText.text = $"BAT {battery:0}%  {voltage:0.0}V";
+        SetText(batteryText, $"BAT {battery:0}%  {voltage:0.0}V");
         batteryText.color = batteryColor;
         batteryFill.rectTransform.sizeDelta = new Vector2(70f * battery / 100f, 3f);
         batteryFill.color = batteryColor;
     }
 
-    private void UpdateNavigation(Transform view)
+    /// <summary>返航/導航箭頭每幀更新 (平順轉動)</summary>
+    private void UpdateNavigationArrows(Transform view)
     {
         Vector3 dronePosition = droneController.transform.position;
         float viewHeading = HeadingOf(view.forward);
-
-        // 返航方向與距離
         Vector3 toHome = droneController.HomePosition - dronePosition;
-        float homeDistance = new Vector2(toHome.x, toHome.z).magnitude;
-        homeText.text = $"HOME {homeDistance:0}m";
         homeArrow.localRotation = Quaternion.Euler(0f, 0f, -Mathf.DeltaAngle(viewHeading, HeadingOf(toHome)));
 
         bool hasTarget = NavigationTarget.HasTarget;
-        navArrow.gameObject.SetActive(hasTarget);
-        navText.gameObject.SetActive(hasTarget);
+        if (navArrow.gameObject.activeSelf != hasTarget) navArrow.gameObject.SetActive(hasTarget);
+        if (navText.gameObject.activeSelf != hasTarget) navText.gameObject.SetActive(hasTarget);
         if (!hasTarget) return;
 
         Vector3 toTarget = NavigationTarget.Position - dronePosition;
-        float distance = toTarget.magnitude;
-        float relative = Mathf.DeltaAngle(viewHeading, HeadingOf(toTarget));
-        navArrow.localRotation = Quaternion.Euler(0f, 0f, -relative);
-        Image arrowImage = navArrow.GetComponent<Image>();
-        arrowImage.color = NavigationTarget.Color;
+        navArrow.localRotation = Quaternion.Euler(0f, 0f, -Mathf.DeltaAngle(viewHeading, HeadingOf(toTarget)));
+    }
 
+    /// <summary>返航距離與導航文字 (降頻更新)</summary>
+    private void UpdateNavigation(Transform view)
+    {
+        Vector3 dronePosition = droneController.transform.position;
+        Vector3 toHome = droneController.HomePosition - dronePosition;
+        float homeDistance = new Vector2(toHome.x, toHome.z).magnitude;
+        SetText(homeText, $"HOME {homeDistance:0}m");
+
+        if (!NavigationTarget.HasTarget) return;
+        Vector3 toTarget = NavigationTarget.Position - dronePosition;
+        Image arrowImage = navArrow.GetComponent<Image>();
+        if (arrowImage.color != NavigationTarget.Color) arrowImage.color = NavigationTarget.Color;
+        if (navText.color != NavigationTarget.Color) navText.color = NavigationTarget.Color;
         string height = toTarget.y >= 0f ? $"+{toTarget.y:0}" : $"{toTarget.y:0}";
-        navText.color = NavigationTarget.Color;
-        navText.text = $"{NavigationTarget.Label}  {distance:0}m  ({height}m)";
+        SetText(navText, $"{NavigationTarget.Label}  {toTarget.magnitude:0}m  ({height}m)");
     }
 
     private void UpdateCargo()
     {
+        if (bombDropper == null && droneController != null) bombDropper = droneController.GetComponent<DroneBombDropper>();
+
         if (pickupHandler == null)
         {
-            cargoText.text = string.Empty;
+            SetText(cargoText, string.Empty);
             return;
         }
 
-        if (pickupHandler.IsCarrying)
+        if (bombDropper != null && !pickupHandler.IsCarrying && pickupHandler.CargoInRange == null)
+        {
+            // 炸彈無人機：顯示投彈狀態
+            cargoText.color = bombDropper.IsLoaded ? warningColor : cautionColor;
+            SetText(cargoText, bombDropper.IsLoaded ? "BOMB READY   [B / RT] 投彈" : $"RELOADING {bombDropper.ReloadProgress * 100f:0}%");
+        }
+        else if (pickupHandler.IsCarrying)
         {
             cargoText.color = cautionColor;
-            cargoText.text = $"PAYLOAD {pickupHandler.CarriedMass:0.0}kg   [Z / A] 放下";
+            SetText(cargoText, $"PAYLOAD {pickupHandler.CarriedMass:0.0}kg   [Z / A] 放下");
         }
         else if (pickupHandler.CargoInRange != null)
         {
             cargoText.color = horizonColor;
-            cargoText.text = "[Z / A] 抓取貨物";
+            SetText(cargoText, "[Z / A] 抓取貨物");
         }
         else
         {
-            cargoText.text = string.Empty;
+            SetText(cargoText, string.Empty);
         }
+    }
+
+    private void UpdateBlink()
+    {
+        if (string.IsNullOrEmpty(lastWarning)) return;
+        // 以 CanvasRenderer 調整透明度：不會讓 TMP 重建網格
+        warningText.canvasRenderer.SetAlpha(0.55f + 0.45f * Mathf.Abs(Mathf.Sin(Time.time * 6f)));
     }
 
     private void UpdateWarnings()
     {
-        crashFlashTimer -= Time.deltaTime;
-
         string warning = string.Empty;
         float agl = droneController.AltitudeAboveGround;
         float battery = droneController.BatteryPercent;
@@ -488,19 +738,17 @@ public class DroneFlightHUD : MonoBehaviour
         }
         lastWarning = warning;
 
-        warningText.text = warning;
-        float blink = 0.55f + 0.45f * Mathf.Abs(Mathf.Sin(Time.time * 6f));
-        warningText.alpha = blink;
+        SetText(warningText, warning);
     }
 
     private bool IsObstacleAhead(float speed)
     {
         Vector3 direction = droneController.Velocity.normalized;
         float range = Mathf.Clamp(speed * 1.2f, 3f, 25f);
-        RaycastHit[] hits = Physics.SphereCastAll(droneController.transform.position, 0.3f, direction, range, ~0, QueryTriggerInteraction.Ignore);
-        foreach (RaycastHit hit in hits)
+        int count = Physics.SphereCastNonAlloc(droneController.transform.position, 0.3f, direction, obstacleHits, range, ~0, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < count; i++)
         {
-            if (!hit.collider.transform.IsChildOf(droneController.transform))
+            if (!obstacleHits[i].collider.transform.IsChildOf(droneController.transform))
             {
                 return true;
             }

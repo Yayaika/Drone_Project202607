@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using System.Collections.Generic;
+using DG.Tweening;
 
 // 賽道生成器，負責在場景中動態生成起點、終點、檢查圈與樹木，並確保樹木不會阻擋賽道上的關鍵點。
 public class CourseBuilder : MonoBehaviour
@@ -45,17 +46,26 @@ public class CourseBuilder : MonoBehaviour
         CreatePlatform(new Vector3(0, 0, 0), Color.green, "START");
         CreatePlatform(new Vector3(0, 0, courseLength), Color.red, "FINISH");
 
-        // 生成檢查點並記錄其位置
-        for (int i = 0; i < checkpointCount; i++)
+        // 生成連貫的蜿蜒路線 (控制點左右/高低漸變)，再沿路線連續擺放檢查圈
+        List<Vector3> controls = new List<Vector3> { new Vector3(0f, 3f, 0f) };
+        float lateral = 0f;
+        float height = 6f;
+        for (int i = 1; i <= checkpointCount; i++)
         {
-            float z = courseLength * (i + 1f) / (checkpointCount + 1f);
-            float x = Random.Range(-15f, 15f);
-            float y = Random.Range(4f, 12f);
-
-            Vector3 ringPos = new Vector3(x, y, z);
-            CreateCheckpointRing(ringPos, i);
-            criticalPositions.Add(ringPos);
+            lateral = Mathf.Clamp(lateral + Random.Range(-9f, 9f), -15f, 15f);
+            height = Mathf.Clamp(height + Random.Range(-3f, 3f), 4f, 12f);
+            controls.Add(new Vector3(lateral, height, courseLength * i / (checkpointCount + 1f)));
         }
+        controls.Add(new Vector3(0f, 4f, courseLength));
+
+        List<Vector3> route = RaceCourseLayout.RoundCorners(controls, 10f, 4f, 0.5f);
+        List<RaceCourseLayout.Gate> gates = RaceCourseLayout.PlaceGates(route, 12f, courseLength / (checkpointCount + 1f), 30f, 3f * RingSizeScale, Random.Range(0, 100000));
+        for (int i = 0; i < gates.Count; i++)
+        {
+            CreateCheckpointRing(gates[i].Position, i, gates[i].Rotation, 3f);
+            criticalPositions.Add(gates[i].Position);
+        }
+        checkpointCount = gates.Count;
 
         // 生成樹木（加入避開邏輯）
         for (int i = 0; i < treeCount; i++)
@@ -174,43 +184,64 @@ public class CourseBuilder : MonoBehaviour
         sign.GetComponent<Renderer>().material.color = color;
     }
 
-    void CreateCheckpointRing(Vector3 pos, int index)
-    {
-        CreateCheckpointRing(pos, index, Quaternion.identity, 3f);
-    }
+    /// <summary>所有地圖檢查圈的整體縮放 (各場景設定的半徑 × 此值)</summary>
+    public const float RingSizeScale = 0.65f;
 
-    /// <summary>建立一個檢查圈 (亦供程序化城市賽道使用)，rotation 決定圈面朝向</summary>
+    /// <summary>
+    /// 建立一個檢查圈 (亦供程序化城市與 City2 賽道使用)。
+    /// rotation 的 forward = 飛行穿越方向 (圈面法線)；外觀使用 GameplayAssets 的 ring target 20，缺少時退回圓柱拼接。
+    /// </summary>
     public static GameObject CreateCheckpointRing(Vector3 pos, int index, Quaternion rotation, float radius)
     {
+        radius *= RingSizeScale;
         GameObject ringParent = new GameObject("Checkpoint_" + index);
-        ringParent.transform.position = pos;
+        ringParent.transform.SetPositionAndRotation(pos, rotation);
 
-        int segments = 12;
-
-        for (int i = 0; i < segments; i++)
+        GameplayAssets assets = GameplayAssets.Instance;
+        GameObject ringPrefab = assets != null ? assets.checkpointRing : null;
+        if (ringPrefab != null)
         {
-            float angle = i * Mathf.PI * 2f / segments;
-            Vector3 segPos = new Vector3(Mathf.Cos(angle) * radius, Mathf.Sin(angle) * radius, 0f);
-
-            GameObject seg = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            seg.transform.parent = ringParent.transform;
-            seg.transform.localPosition = segPos;
-            seg.transform.localScale = new Vector3(0.4f, 0.6f, 0.4f);
-            seg.transform.LookAt(ringParent.transform.position);
-            seg.transform.Rotate(90f, 0f, 0f);
-            seg.GetComponent<Renderer>().material.color = new Color(1f, 0.6f, 0f); // 預設橘色
-            Destroy(seg.GetComponent<Collider>());
+            GameObject ring = Instantiate(ringPrefab, ringParent.transform);
+            ring.name = "Ring";
+            // Prefab 本身的旋轉讓圈面法線朝 +Z，保留它再整體套用檢查點朝向
+            ring.transform.localPosition = Vector3.zero;
+            ring.transform.localRotation = ringPrefab.transform.localRotation;
+            ring.transform.localScale = ringPrefab.transform.localScale * (radius * 2f);
+            // 原 Prefab 的 GateTrigger 是舊版 City2 單一閘門用的，這裡由 RingTrigger 負責判定
+            foreach (GateTrigger legacy in ring.GetComponentsInChildren<GateTrigger>(true))
+            {
+                legacy.enabled = false;
+                Destroy(legacy);
+            }
+            foreach (Collider modelCollider in ring.GetComponentsInChildren<Collider>(true))
+            {
+                Destroy(modelCollider);
+            }
+        }
+        else
+        {
+            int segments = 12;
+            for (int i = 0; i < segments; i++)
+            {
+                float angle = i * Mathf.PI * 2f / segments;
+                GameObject seg = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                seg.transform.SetParent(ringParent.transform, false);
+                seg.transform.localPosition = new Vector3(Mathf.Cos(angle) * radius, Mathf.Sin(angle) * radius, 0f);
+                seg.transform.localScale = new Vector3(0.4f, 0.6f, 0.4f);
+                seg.transform.LookAt(ringParent.transform.position);
+                seg.transform.Rotate(90f, 0f, 0f);
+                Destroy(seg.GetComponent<Collider>());
+            }
         }
 
-        SphereCollider col = ringParent.AddComponent<SphereCollider>();
+        // 薄盒狀觸發區：必須「穿過」圈面才算通過，不會因為從旁邊擦過而觸發
+        BoxCollider col = ringParent.AddComponent<BoxCollider>();
         col.isTrigger = true;
-        col.radius = radius * 0.85f;
+        col.size = new Vector3(radius * 1.7f, radius * 1.7f, 2f);
 
         // 掛載動態判定組件並綁定編號
         RingTrigger trigger = ringParent.AddComponent<RingTrigger>();
         trigger.checkpointIndex = index;
-
-        ringParent.transform.rotation = rotation;
         return ringParent;
     }
 
@@ -256,16 +287,33 @@ public class CourseBuilder : MonoBehaviour
 // 檢查點碰撞觸發邏輯，直接包含於同檔案內
 public class RingTrigger : MonoBehaviour
 {
+    public static readonly Color NextColor = new Color(1f, 0.85f, 0.1f);
+    public static readonly Color PendingColor = new Color(1f, 0.45f, 0.05f);
+    private static readonly Color PassedColor = new Color(0.3f, 1f, 0.45f);
+
+    /// <summary>場景中所有檢查圈 (含已通過而隱藏的)，依編號查詢</summary>
+    private static readonly List<RingTrigger> all = new List<RingTrigger>();
+
     public int checkpointIndex;
     private bool isPassed = false;
 
+    public bool IsPassed => isPassed;
+    public static IReadOnlyList<RingTrigger> All => all;
+
+    private void Awake()
+    {
+        all.Add(this);
+    }
+
+    private void OnDestroy()
+    {
+        all.Remove(this);
+    }
+
     private void Start()
     {
-        // 0 號目標圈開局自動設為黃色提示
-        if (checkpointIndex == 0)
-        {
-            SetColor(Color.yellow);
-        }
+        // 0 號目標圈開局自動設為黃色提示，其餘為橘色
+        SetColor(checkpointIndex == 0 ? NextColor : PendingColor);
     }
 
     private void OnTriggerEnter(Collider other)
@@ -280,17 +328,21 @@ public class RingTrigger : MonoBehaviour
             {
                 isPassed = true;
 
-                // 1. 本身順序正確，變綠色
-                SetColor(Color.green);
-
-                // 2. 通知 GameManager 更新進度與最新重生點
+                // 1. 通知 GameManager 更新進度與最新重生點
                 GameManager.Instance.CheckpointPassed(checkpointIndex, transform);
 
-                // 3. 搜尋並將下一個目標檢查點改為黃色高亮，並更新 HUD 導航
+                // 2. 通過的圈閃綠後縮小消失
+                SetColor(PassedColor);
+                GetComponent<Collider>().enabled = false;
+                transform.DOKill();
+                transform.DOScale(Vector3.zero, 0.35f).SetEase(Ease.InBack)
+                    .OnComplete(() => { if (this != null) gameObject.SetActive(false); });
+
+                // 3. 下一個目標檢查點改為黃色高亮，並更新 HUD 導航
                 RingTrigger next = SetNavigationTo(checkpointIndex + 1);
                 if (next != null)
                 {
-                    next.SetColor(Color.yellow);
+                    next.SetColor(NextColor);
                 }
             }
         }
@@ -299,12 +351,11 @@ public class RingTrigger : MonoBehaviour
     /// <summary>把 HUD 導航目標設為指定編號的檢查圈，找不到則清除</summary>
     public static RingTrigger SetNavigationTo(int index)
     {
-        RingTrigger[] allTriggers = FindObjectsByType<RingTrigger>(FindObjectsSortMode.None);
-        foreach (RingTrigger trigger in allTriggers)
+        foreach (RingTrigger trigger in all)
         {
-            if (trigger.checkpointIndex == index)
+            if (trigger != null && trigger.checkpointIndex == index)
             {
-                NavigationTarget.Set(trigger.transform.position, $"CP {index + 1}/{allTriggers.Length}", Color.yellow);
+                NavigationTarget.Set(trigger.transform.position, $"CP {index + 1}/{all.Count}", NextColor);
                 return trigger;
             }
         }
@@ -317,7 +368,21 @@ public class RingTrigger : MonoBehaviour
     {
         foreach (Renderer r in GetComponentsInChildren<Renderer>())
         {
-            if (r != null) r.material.color = newColor;
+            if (r == null) continue;
+            Material material = r.material;
+            material.color = newColor;
+            if (material.HasProperty("_EmissionColor"))
+            {
+                // 讓圈在陰影/夜晚也看得清楚
+                material.EnableKeyword("_EMISSION");
+                material.SetColor("_EmissionColor", newColor * 0.8f);
+            }
         }
+    }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics()
+    {
+        all.Clear();
     }
 }

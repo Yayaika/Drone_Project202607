@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using DG.Tweening;
 using UnityEngine;
 
 /// <summary>
@@ -9,7 +10,7 @@ public class CityPedestrians : MonoBehaviour
 {
     public static CityPedestrians Instance { get; private set; }
 
-    private enum State { Walking, ToCurb, Waiting, Crossing, Idle, Standing }
+    private enum State { Walking, ToCurb, Waiting, Crossing, Idle, Standing, Injured }
 
     private class Walker
     {
@@ -339,6 +340,53 @@ public class CityPedestrians : MonoBehaviour
             }
         }
     }
+
+    #region 炸彈受傷
+
+    [Header("炸彈受傷")]
+    [Tooltip("受傷倒地的路人多久後移除 (秒)")]
+    [SerializeField] private float injuredRemoveSeconds = 45f;
+
+    /// <summary>
+    /// 炸彈命中：hit 屬於某位路人時讓他倒地 (停止行走與動畫) 並回傳 true。
+    /// 火焰/煙霧由 <see cref="BurningDamage"/> 處理。
+    /// </summary>
+    public bool TryInjure(Transform hit)
+    {
+        if (hit == null) return false;
+        foreach (Walker walker in walkers)
+        {
+            if (walker.Transform == null || (hit != walker.Transform && !hit.IsChildOf(walker.Transform))) continue;
+            if (walker.State == State.Injured) return true;
+
+            // 正在穿越馬路時釋放斑馬線，車輛才不會一直等待
+            if (walker.State == State.Crossing) SetCrosswalk(walker, -1);
+            walker.State = State.Injured;
+            if (walker.Animator != null) walker.Animator.speed = 0f;
+
+            // 向後倒地
+            Transform body = walker.Transform;
+            Vector3 lyingEuler = body.eulerAngles + new Vector3(-85f, 0f, 0f);
+            body.DORotate(lyingEuler, 0.45f).SetEase(Ease.OutBounce);
+            body.DOMoveY(body.position.y + 0.15f, 0.45f);
+            StartCoroutine(RemoveInjuredLater(walker));
+            return true;
+        }
+        return false;
+    }
+
+    private System.Collections.IEnumerator RemoveInjuredLater(Walker walker)
+    {
+        yield return new WaitForSeconds(injuredRemoveSeconds);
+        walkers.Remove(walker);
+        if (walker.Transform != null)
+        {
+            walker.Transform.DOKill();
+            Destroy(walker.Transform.gameObject);
+        }
+    }
+
+    #endregion
 
     private void SetCrosswalk(Walker walker, int delta)
     {

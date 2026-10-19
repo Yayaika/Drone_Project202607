@@ -3951,6 +3951,8 @@ MonoBehaviour:
   headingPixelsPerDegree: 2.2
   sideColumnOffset: 150
   topBottomOffset: 112
+  settingsButtonHeight: 138
+  settingsButtonOffsetX: 125
   warningColor: {r: 1, g: 0.32, b: 0.25, a: 1}
   cautionColor: {r: 1, g: 0.85, b: 0.2, a: 1}
 --- !u!1 &2142681681719497472
@@ -15571,6 +15573,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 1000011789979478, guid: f5344c194bab9264c93ba5f2f38dab9e, type: 3}
       insertIndex: -1
       addedObject: {fileID: 6877018798734078619}
+    - targetCorrespondingSourceObject: {fileID: 1000011789979478, guid: f5344c194bab9264c93ba5f2f38dab9e, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3745880537261731118}
   m_SourcePrefab: {fileID: 100100000, guid: f5344c194bab9264c93ba5f2f38dab9e, type: 3}
 --- !u!4 &6495739259207074645 stripped
 Transform:
@@ -15626,21 +15631,32 @@ MonoBehaviour:
   isGrounded: 1
   isInverted: 1
   maxThrust: 40
-  altitudeHoldStrength: 5
-  horizontalSpeedBoost: 15
+  altitudeHoldStrength: 8
+  horizontalSpeedBoost: 0
+  maxClimbRate: 7
+  maxDescentRate: 4
+  maxVerticalAcceleration: 13
+  motorResponseTime: 0.05
   baseMass: 1
   payloadMass: 0
   cruisePitchAngle: -12
-  maxTiltAngle: 20
+  maxTiltAngle: 25
   maxYawRate: 300
-  stabilizerStrength: 15
-  attitudeDamping: 0.8
+  stabilizerStrength: 40
+  bodyAngularDamping: 2
+  attitudeDamping: 5.5
   attitudeGain: 2
   stickExpo: 0.3
-  stickResponse: 8
-  yawAcceleration: 900
+  stickResponse: 18
+  yawAcceleration: 2000
   payloadAgilityLoss: 0.35
   turbulenceStrength: 0.25
+  linearDrag: 0.15
+  quadraticDrag: 0.02
+  maxHorizontalSpeed: 17
+  horizontalResponse: 3.5
+  maxHorizontalAccel: 16
+  tiltVisualScale: 0.6
   wallPushOut: 6
   wallBounce: 0.2
   groundNormalThreshold: 0.6
@@ -15651,8 +15667,10 @@ MonoBehaviour:
   - {fileID: 4424626464443672973}
   - {fileID: 5090763147178300875}
   propIdleRPM: 800
-  propHoverRPM: 2800
+  propHoverRPM: 2000
   propMaxRPM: 3500
+  propMaxStepDegrees: 35
+  mixerTorqueScale: 0.02
   xrOriginTransform: {fileID: 1037122760699329869}
   cameraPositions:
   - {fileID: 139703222036220374}
@@ -15791,3 +15809,19 @@ MonoBehaviour:
   attachDuration: 0.25
   dropIgnoreCollisionTime: 0.5
   crashDamageTransfer: 0.8
+--- !u!114 &3745880537261731118
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6496504088213243553}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 86a27f665b45dd748a644ecc08e53270, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  bombPrefab: {fileID: 5859853512765820330, guid: ec6a23314dec35b48bc5c45d7b6e7d21, type: 3}
+  mountedBomb: {fileID: 1324519506548856985}
+  reloadSeconds: 3
+  crashDetonateSpeed: 6

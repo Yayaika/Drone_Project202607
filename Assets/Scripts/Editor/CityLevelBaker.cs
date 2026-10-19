@@ -231,7 +231,20 @@ public static class CityLevelBaker
             .ToArray();
     }
 
-    private static Object[] StreetPrefabs(string folder, params string[] prefixes)
+    /// <summary>LowpolyStreetPack 原始材質 → URP 轉換材質 (缺少轉換版時沿用原材質)</summary>
+    public static Dictionary<Material, Material> StreetPackUrpRemap()
+    {
+        Dictionary<Material, Material> remap = new Dictionary<Material, Material>();
+        foreach (string guid in AssetDatabase.FindAssets("t:Material", new[] { StreetPackMaterials }))
+        {
+            Material source = AssetDatabase.LoadAssetAtPath<Material>(AssetDatabase.GUIDToAssetPath(guid));
+            Material converted = source != null ? AssetDatabase.LoadAssetAtPath<Material>($"{UrpMaterialFolder}/{source.name}_URP.mat") : null;
+            if (converted != null) remap[source] = converted;
+        }
+        return remap;
+    }
+
+    public static Object[] StreetPrefabs(string folder, params string[] prefixes)
     {
         string path = $"{StreetPackRoot}/{folder}";
         if (!AssetDatabase.IsValidFolder(path)) return new Object[0];
