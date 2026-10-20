@@ -14,6 +14,7 @@ public class ModeSelectPanel : MonoBehaviour
 {
     private const float DesignWidth = 640f;
     private const float DesignHeight = 380f;
+    private const float CardWidth = 196f;
 
     private CanvasGroup group;
     private RectTransform modePage;
@@ -110,26 +111,28 @@ public class ModeSelectPanel : MonoBehaviour
         title.fontStyle = FontStyles.Bold;
 
         RectTransform cards = RuntimeUI.CreateCentered("Cards", modePage, new Vector2(0f, 0f), new Vector2(DesignWidth, 220f));
-        CreateModeCard(cards, GameModeType.Race, new Vector2(-150f, 0f),
+        CreateModeCard(cards, GameModeType.Race, new Vector2(-206f, 0f),
             "競速  RACE", "依序穿越檢查圈\n挑戰最快時間與金牌", new Color(1f, 0.75f, 0.2f));
-        CreateModeCard(cards, GameModeType.Delivery, new Vector2(150f, 0f),
+        CreateModeCard(cards, GameModeType.Delivery, new Vector2(0f, 0f),
             "搬運  DELIVERY", "抓取貨物送到指定地點\n碰撞會造成貨損扣分", new Color(0.35f, 0.85f, 1f));
+        CreateModeCard(cards, GameModeType.Strike, new Vector2(206f, 0f),
+            "打擊  STRIKE", "投彈摧毀目標\n遮蔽下的目標要撞擊", new Color(1f, 0.4f, 0.35f));
 
         RuntimeUI.CreateButton("CloseButton", modePage, "返回", new Vector2(0f, -155f), new Vector2(140f, 36f), Close, 18f);
     }
 
     private void CreateModeCard(RectTransform parent, GameModeType mode, Vector2 position, string title, string description, Color accent)
     {
-        Button card = RuntimeUI.CreateButton($"Card_{mode}", parent, string.Empty, position, new Vector2(270f, 210f), () => ShowLevels(mode), 18f);
+        Button card = RuntimeUI.CreateButton($"Card_{mode}", parent, string.Empty, position, new Vector2(CardWidth, 210f), () => ShowLevels(mode), 18f);
         Outline outline = card.gameObject.AddComponent<Outline>();
         outline.effectColor = accent;
         outline.effectDistance = new Vector2(2f, -2f);
 
-        TextMeshProUGUI titleText = RuntimeUI.CreateText("CardTitle", card.transform, title, 26f, new Vector2(0f, 55f), new Vector2(250f, 36f));
+        TextMeshProUGUI titleText = RuntimeUI.CreateText("CardTitle", card.transform, title, 22f, new Vector2(0f, 55f), new Vector2(CardWidth - 16f, 36f));
         titleText.color = accent;
         titleText.fontStyle = FontStyles.Bold;
 
-        TextMeshProUGUI descText = RuntimeUI.CreateText("CardDesc", card.transform, description, 17f, new Vector2(0f, -5f), new Vector2(250f, 60f));
+        TextMeshProUGUI descText = RuntimeUI.CreateText("CardDesc", card.transform, description, 15f, new Vector2(0f, -5f), new Vector2(CardWidth - 16f, 60f));
         descText.textWrappingMode = TextWrappingModes.Normal;
         descText.color = new Color(1f, 1f, 1f, 0.85f);
 
@@ -138,8 +141,12 @@ public class ModeSelectPanel : MonoBehaviour
         {
             if (LevelCatalog.IsSceneInBuild(level.SceneName)) available++;
         }
-        TextMeshProUGUI countText = RuntimeUI.CreateText("CardCount", card.transform, $"{available} 個關卡可遊玩", 15f, new Vector2(0f, -70f), new Vector2(250f, 22f));
-        countText.color = available > 0 ? RuntimeUI.AccentColor : RuntimeUI.WarningColor;
+        // 打擊模式只開放給有投彈功能的炸彈無人機
+        bool locked = mode == GameModeType.Strike && !LevelCatalog.SelectedDroneCanBomb;
+        if (locked) card.interactable = false;
+        string countLine = locked ? "需要炸彈無人機" : $"{available} 個關卡可遊玩";
+        TextMeshProUGUI countText = RuntimeUI.CreateText("CardCount", card.transform, countLine, 14f, new Vector2(0f, -70f), new Vector2(CardWidth - 16f, 22f));
+        countText.color = available > 0 && !locked ? RuntimeUI.AccentColor : RuntimeUI.WarningColor;
     }
 
     private void BuildLevelPage(RectTransform frame)

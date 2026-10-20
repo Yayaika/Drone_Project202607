@@ -180,6 +180,14 @@ public static class BombDamage
             Transform root = attached != null ? attached.transform : hit.transform;
             if (!handled.Add(root)) continue;
 
+            // 打擊模式目標：需有視線 (上方遮蔽會擋住爆炸)
+            StrikeTarget strikeTarget = root.GetComponent<StrikeTarget>();
+            if (strikeTarget != null)
+            {
+                if (strikeTarget.TryBlastHit(center)) damaged++;
+                continue;
+            }
+
             if (pedestrians != null && pedestrians.TryInjure(root))
             {
                 BurningDamage.Ignite(root, true);
@@ -187,6 +195,13 @@ public static class BombDamage
                 continue;
             }
             if (traffic != null && traffic.TryWreck(root))
+            {
+                BurningDamage.Ignite(root, false);
+                damaged++;
+                continue;
+            }
+            StrikeVehicleRoute route = root.GetComponentInParent<StrikeVehicleRoute>();
+            if (route != null && route.Wreck(root))
             {
                 BurningDamage.Ignite(root, false);
                 damaged++;

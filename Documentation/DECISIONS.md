@@ -267,6 +267,43 @@
 - **決定：** 設置面板開啟時自動選取第一個可互動元件 (手把搖桿導覽、A 鍵確認才有起點)，關閉時清除選取；開關鍵新增 VR 左手 Menu 鍵 (原有 ESC、手把 Start)。VR 手把射線點擊沿用 XRUIInputModule + TrackedDeviceGraphicRaycaster。
 - **相關檔案：** `Script_1/DroneFlightHUD.cs`
 
+## D-026：新增打擊模式 (STRIKE)
+
+- **日期：** 2026-10-20
+- **狀態：** 已確認（使用者要求：獨立第三模式、只有炸彈機能玩、撞擊目標放遮蔽物下、撞毀即成功後復活、目標少一點並加入移動車輛）
+- **決定：**
+  - `GameModeType.Strike`，`LevelCatalog` 新增 `StrikeBombTargets / StrikeRamTargets / StrikeVehicleTargets / StrikeTimeLimit`；住宅區、市中心支援。`CityGenerator`／`GameManager` 在打擊模式建立 `StrikeMissionManager`（不建立競速檢查圈）。
+  - 撞擊目標位置以射線取樣：地面上方 2.8–12m 有實心遮蔽、8 個水平方向至少一個 9m 內淨空且終點上方開闊；不放在車道上。判斷「上方開闊」時忽略 `MapBoundary` 天花板。
+  - `BombDamage.Apply` 先處理 `StrikeTarget`：需視線；撞擊目標只接受撞擊。車輛目標摧毀時呼叫 `CityTraffic.TryWreck` 讓車停下燃燒。
+  - 是否可投彈以 PlayerDB 中無人機 Prefab 是否有 `DroneBombDropper` 判斷（`LevelCatalog.SelectedDroneCanBomb`，在選擇無人機時設定）。
+- **相關檔案：** `Gameplay/StrikeMissionManager.cs`、`Gameplay/StrikeTarget.cs`、`Gameplay/Bombing.cs`、`Gameplay/LevelCatalog.cs`、`Level/CityGenerator.cs`、`Level/CityTraffic.cs`、`GameManager.cs`、`UI/ModeSelectPanel.cs`、`UI/UIPlayerSelectCtrl.cs`、`UI/ControlsHelp.cs`
+
+## D-027：HUD 永遠顯示在最上層
+
+- **日期：** 2026-10-20
+- **狀態：** 已確認（使用者要求）
+- **決定：** 無人機 HUD 為世界空間 Canvas，貼近牆面時會被遮住。新增 `UI/HudAlwaysOnTop.cs`：HUD 底下所有 Graphic 加上 `UIZTestAlways`（IMaterialModifier，複製材質並把 `unity_GUIZTestMode` 設為 Always），每 0.5 秒補上新建立的 UI。不調整 Canvas 排序（會影響點擊判定）。由 `DroneFlightHUD.Start` 自動掛上。
+- **相關檔案：** `UI/HudAlwaysOnTop.cs`、`Script_1/DroneFlightHUD.cs`
+
+## D-028：打擊模式專屬場景「港區・打擊演習」
+
+- **日期：** 2026-10-20
+- **狀態：** 已確認（使用者選擇：新建專屬場景、目標點位手動擺放）
+- **決定：**
+  - 打擊模式只在 `StrikePort` 場景進行；住宅區/市中心改回只支援競速與搬運（自動取樣程式保留為沒有點位時的備援）。
+  - 場景由 `Editor/StrikeSceneBuilder.cs`（選單「無人機遊戲/11. 建立打擊關卡場景 (港區)」）建立：以 SampleScene 的系統物件為基礎，移除 CourseBuilder 與地面；結構以 CityMeshBuilder 建網格（世界座標 UV）存於 `Assets/GeneratedLevels/StrikePort`，材質於 `Assets/Materials/StrikePort`。重新執行只重建 `StrikePort_Level`。
+  - 目標點位 `StrikeTargetPoint`（含撞擊飛入點）、車道 `StrikeVehicleRoute`（環狀路徑等速行駛、殘骸排隊後清除）、邊界 `StrikeArena`（MapBoundary，天花板 60m）皆為場景物件。
+  - 沒有軍事類素材，結構全為貼圖方塊/圓柱 + 既有車輛與路燈素材（低多邊形風格，屬 placeholder 等級，可日後替換）。
+- **相關檔案：** `Editor/StrikeSceneBuilder.cs`、`Gameplay/StrikeTargetPoint.cs`、`Level/StrikeVehicleRoute.cs`、`Level/StrikeArena.cs`、`Gameplay/StrikeMissionManager.cs`、`Gameplay/LevelCatalog.cs`、`Scenes/StrikePort.unity`
+
+## D-029：HUD 設置按鈕可點擊
+
+- **日期：** 2026-10-20
+- **狀態：** 已確認（使用者回報按鈕無法按）
+- **背景：** 無人機 Prefab 的 HUD Canvas 上 `GraphicRaycaster` 為停用狀態（只有 VR 用的 TrackedDeviceGraphicRaycaster），且設置按鈕位於巢狀 Canvas、沒有自己的 Raycaster，滑鼠點擊判定不到。
+- **決定：** `DroneFlightHUD` 執行時啟用 HUD 根 Canvas 的 GraphicRaycaster，並為設置按鈕的巢狀 Canvas 補上 GraphicRaycaster 與根 Canvas 相同類型的 VR Raycaster。
+- **相關檔案：** `Script_1/DroneFlightHUD.cs`、`UI/HudAlwaysOnTop.cs`
+
 ## 後續決策
 
 新增決策時複製以下格式：

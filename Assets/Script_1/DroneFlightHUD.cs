@@ -138,6 +138,9 @@ public class DroneFlightHUD : MonoBehaviour
             pickupHandler = droneController.GetComponent<DronePickupHandler>();
         }
         ApplyOsdVisibility();
+
+        // HUD 是世界空間 Canvas：貼近牆面/建築時不能被遮住
+        if (GetComponent<HudAlwaysOnTop>() == null) gameObject.AddComponent<HudAlwaysOnTop>();
     }
 
     private void Update()
@@ -421,6 +424,23 @@ public class DroneFlightHUD : MonoBehaviour
         if (target != null && target.GetComponent<Canvas>() == null) target.AddComponent<Canvas>();
     }
 
+    /// <summary>可互動的 Canvas：啟用滑鼠用的 GraphicRaycaster，並比照 HUD 根 Canvas 加上 VR 射線用的 Raycaster</summary>
+    private void EnsureRaycasters(GameObject target)
+    {
+        if (target == null) return;
+        GraphicRaycaster raycaster = target.GetComponent<GraphicRaycaster>();
+        if (raycaster == null) raycaster = target.AddComponent<GraphicRaycaster>();
+        raycaster.enabled = true;
+
+        if (target == gameObject) return;
+        foreach (UnityEngine.EventSystems.BaseRaycaster rootRaycaster in GetComponents<UnityEngine.EventSystems.BaseRaycaster>())
+        {
+            System.Type type = rootRaycaster.GetType();
+            if (type == typeof(GraphicRaycaster) || target.GetComponent(type) != null) continue;
+            target.AddComponent(type);
+        }
+    }
+
     /// <summary>
     /// 既有 HUD 元素重新排版，避免與 OSD 重疊：
     /// 競速計時放左上、檢查點進度放右上 (原本被失效的版面配置疊在航向帶與下方狀態列上)，
@@ -463,7 +483,11 @@ public class DroneFlightHUD : MonoBehaviour
                 label.textWrappingMode = TextWrappingModes.NoWrap;
             }
             AddNestedCanvas(settingsButton.gameObject);
+            // 巢狀 Canvas 的 UI 只會被「自己」的 Raycaster 判定，按鈕要能點必須補上
+            EnsureRaycasters(settingsButton.gameObject);
         }
+        // 滑鼠點擊設置面板/按鈕需要 GraphicRaycaster (Prefab 上預設停用，只留 VR 射線用的 Raycaster)
+        EnsureRaycasters(gameObject);
 
         settingsPanel = FindDeepChild(transform, "[Panel]設置")?.gameObject;
     }

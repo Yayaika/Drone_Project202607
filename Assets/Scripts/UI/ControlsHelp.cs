@@ -72,9 +72,12 @@ public static class ControlsHelp
     /// <summary>目前遊戲模式的過關說明</summary>
     public static string ObjectiveText()
     {
-        return LevelCatalog.SelectedMode == GameModeType.Delivery
-            ? "抓取貨物（黃色光柱），送到綠色光柱並放下，完成所有訂單！撞擊會損壞貨物。"
-            : "依序穿越所有檢查圈（黃色為下一個），最快抵達終點！";
+        return LevelCatalog.SelectedMode switch
+        {
+            GameModeType.Delivery => "抓取貨物（黃色光柱），送到綠色光柱並放下，完成所有訂單！撞擊會損壞貨物。",
+            GameModeType.Strike => "摧毀所有目標！紅色目標從空中投彈（B / 右扳機）；紫色目標在騎樓或頂棚下，炸彈打不到，要低飛繞進去撞擊；橘色是行駛中的車輛，投彈要預判或直接撞擊。",
+            _ => "依序穿越所有檢查圈（黃色為下一個），最快抵達終點！"
+        };
     }
 
     public static TMP_SpriteAsset ResolveSpriteAsset()

@@ -80,12 +80,16 @@ public class GameManager : MonoBehaviour
     {
         FindAndBindDroneUI();
         UpdateProgressUI();
-        GameAudio.PlayMusic(Mode == GameModeType.Race ? GameMusic.Race : GameMusic.Delivery);
+        GameAudio.PlayMusic(Mode == GameModeType.Delivery ? GameMusic.Delivery : GameMusic.Race);
 
         // 搬運模式：場景沒有放任務管理器時自動建立 (程序化城市會先自行建立並帶入貨物 Prefab)
         if (Mode == GameModeType.Delivery && FindFirstObjectByType<DeliveryMissionManager>() == null)
         {
             new GameObject("DeliveryMissionManager").AddComponent<DeliveryMissionManager>();
+        }
+        if (Mode == GameModeType.Strike && FindFirstObjectByType<StrikeMissionManager>() == null)
+        {
+            new GameObject("StrikeMissionManager").AddComponent<StrikeMissionManager>();
         }
         StartCoroutine(StartSequence());
     }
@@ -232,6 +236,15 @@ public class GameManager : MonoBehaviour
             facing = toNext;
         }
         subscribedDrone.RespawnAtCheckpoint(lastCheckpointPosition, RespawnRotationFacing(subscribedDrone, facing));
+    }
+
+    /// <summary>把無人機傳送到指定位置並面向 facing，同時設為之後按 R 的重生點 (打擊模式撞擊後重新部署)</summary>
+    public void RespawnAt(Vector3 position, Vector3 facing)
+    {
+        RecordRespawnPoint(position, facing);
+        DroneController1 drone = subscribedDrone != null ? subscribedDrone : GetDrone();
+        if (drone == null) return;
+        drone.RespawnAtCheckpoint(position, RespawnRotationFacing(drone, lastCheckpointFacing));
     }
 
     private static RingTrigger FindCheckpoint(int index)

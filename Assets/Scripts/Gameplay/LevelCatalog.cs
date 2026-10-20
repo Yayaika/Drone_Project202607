@@ -5,7 +5,8 @@ using UnityEngine.SceneManagement;
 public enum GameModeType
 {
     Race,     // 競速：依序穿越檢查點，比時間
-    Delivery  // 搬運：取貨並送到指定地點，比分數
+    Delivery, // 搬運：取貨並送到指定地點，比分數
+    Strike    // 打擊：投彈或撞擊摧毀目標物，比分數 (需要炸彈無人機)
 }
 
 /// <summary>
@@ -35,6 +36,13 @@ public class LevelDefinition
     // 搬運參數
     public int DeliveryOrders = 3;
     public float DeliveryTimeLimit = 300f;
+
+    // 打擊參數
+    public int StrikeBombTargets = 3;
+    public int StrikeRamTargets = 2;
+    /// <summary>車流中被標記的移動車輛目標數</summary>
+    public int StrikeVehicleTargets = 1;
+    public float StrikeTimeLimit = 210f;
 
     public bool Supports(GameModeType mode)
     {
@@ -116,6 +124,18 @@ public static class LevelCatalog
             SilverTime = 120f,
             DeliveryOrders = 5,
             DeliveryTimeLimit = 420f
+        },
+        new LevelDefinition
+        {
+            Id = "strike_port",
+            DisplayName = "港區・打擊演習",
+            Description = "倉庫、貨櫃場、油槽與碼頭吊車：空投屋頂目標，低飛鑽進遮蔽處撞擊。",
+            SceneName = "StrikePort",
+            SupportedModes = new[] { GameModeType.Strike },
+            CitySeed = 777,
+            // 投彈 / 撞擊目標由場景中的 StrikeTargetPoint 決定，這裡只設定移動車輛數
+            StrikeVehicleTargets = 2,
+            StrikeTimeLimit = 240f
         }
     };
 
@@ -126,6 +146,9 @@ public static class LevelCatalog
     public static LevelDefinition SelectedLevel { get; set; }
 
     public static bool HasExplicitSelection => SelectedLevel != null;
+
+    /// <summary>選擇的無人機有投彈功能 (打擊模式限定炸彈無人機)；由無人機選擇畫面設定</summary>
+    public static bool SelectedDroneCanBomb { get; set; } = true;
 
     /// <summary>取得目前場景對應的關卡設定 (找不到時回傳該場景的第一個設定或 null)</summary>
     public static LevelDefinition CurrentLevel
@@ -181,12 +204,18 @@ public static class LevelCatalog
         SceneLoader.Load(level.SceneName);
     }
 
-    public static string ModeDisplayName(GameModeType mode) => mode == GameModeType.Race ? "競速" : "搬運";
+    public static string ModeDisplayName(GameModeType mode) => mode switch
+    {
+        GameModeType.Race => "競速",
+        GameModeType.Delivery => "搬運",
+        _ => "打擊"
+    };
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics()
     {
         SelectedMode = GameModeType.Race;
         SelectedLevel = null;
+        SelectedDroneCanBomb = true;
     }
 }

@@ -137,6 +137,13 @@ public partial class CityGenerator : MonoBehaviour, IDeliverySpotProvider
                 manager.Configure(level?.DeliveryOrders ?? 3, level?.DeliveryTimeLimit ?? 300f, cargoPrefab);
             }
         }
+        else if (LevelCatalog.SelectedMode == GameModeType.Strike)
+        {
+            if (FindFirstObjectByType<StrikeMissionManager>() == null)
+            {
+                new GameObject("StrikeMissionManager").AddComponent<StrikeMissionManager>();
+            }
+        }
         else if (buildRaceCourseInRaceMode)
         {
             BuildRaceCourse();

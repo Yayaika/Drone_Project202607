@@ -806,6 +806,17 @@ public class CityTraffic : MonoBehaviour
         return false;
     }
 
+    /// <summary>目前仍在行駛 (未被炸毀) 的車輛 (打擊模式挑選移動目標用)</summary>
+    public List<Transform> ActiveVehicleRoots()
+    {
+        List<Transform> roots = new List<Transform>();
+        foreach (Vehicle vehicle in vehicles)
+        {
+            if (vehicle.Root != null && !vehicle.Wrecked) roots.Add(vehicle.Root);
+        }
+        return roots;
+    }
+
     private System.Collections.IEnumerator ClearWreckLater(Vehicle vehicle)
     {
         yield return new WaitForSeconds(wreckClearSeconds);
