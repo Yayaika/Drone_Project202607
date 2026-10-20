@@ -238,7 +238,7 @@ public static class City2Decorator
 
     private static int PlaceLamps()
     {
-        GameObject[] prefabs = Prefabs(CityLevelBaker.StreetPrefabs("StreetProps/TraficLights", "LampPost_D", "LampPost_J"));
+        GameObject[] prefabs = Prefabs(CityLevelBaker.StreetPrefabs("StreetProps/TraficLights", "LampPost_J"));
         int count = 0;
         foreach (Vector2Int c in Shuffled(Cells(Ground.Open, 1, 1)))
         {

@@ -22,12 +22,21 @@ public class CourseBuilder : MonoBehaviour
     [Tooltip("樹木與檢查圈、起終點平台的水平安全距離")]
     public float safetyRadius = 12f;
 
+    [Header("地圖邊界 (空氣牆)")]
+    [Tooltip("左右邊界 (距賽道中線，m)")]
+    public float boundaryHalfWidth = 60f;
+    [Tooltip("起點後方與終點前方的緩衝距離 (m)")]
+    public float boundaryEndMargin = 40f;
+    public float boundaryCeiling = 45f;
+
     // 用來儲存所有關鍵點的位置 (起點、終點、所有圈圈)
     private List<Vector3> criticalPositions = new List<Vector3>();
 
     void Start()
     {
         BuildCourse();
+        MapBoundary.Build(transform, new Vector2(-boundaryHalfWidth, -boundaryEndMargin),
+            new Vector2(boundaryHalfWidth, courseLength + boundaryEndMargin), 0f, boundaryCeiling);
 
         // 讓 GameManager 的總檢查點數與實際生成數量一致，並把第一個圈設為導航目標
         if (GameManager.Instance != null)
@@ -113,16 +122,28 @@ public class CourseBuilder : MonoBehaviour
         for (int i = 0; i < bushCount && bushPrefabs != null && bushPrefabs.Length > 0; i++)
         {
             Vector3 p = new Vector3(Random.Range(-45f, 45f), 0f, Random.Range(-15f, courseLength + 15f));
-            if (Mathf.Abs(p.x) < 8f) continue;
+            if (Mathf.Abs(p.x) < 8f || OnPlatform(p, 2f)) continue;
             PlaceVegetation(bushPrefabs[Random.Range(0, bushPrefabs.Length)], p, Random.Range(1.2f, 2.5f), false, 0.05f, true);
         }
         for (int i = 0; i < grassCount && grassPrefabs != null && grassPrefabs.Length > 0; i++)
         {
             Vector3 p = new Vector3(Random.Range(-50f, 50f), 0f, Random.Range(-20f, courseLength + 20f));
+            if (OnPlatform(p, 1f)) continue;
             GameObject grass = PlaceVegetation(grassPrefabs[Random.Range(0, grassPrefabs.Length)], p, Random.Range(0.6f, 1f), false, 0.08f, true);
             if (grass == null) continue;
             foreach (Renderer r in grass.GetComponentsInChildren<Renderer>()) r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         }
+    }
+
+    /// <summary>點是否落在起點/終點平台 (8×8m) 外擴 margin 的範圍內</summary>
+    bool OnPlatform(Vector3 p, float margin)
+    {
+        float reach = 4f + margin;
+        foreach (float z in new[] { 0f, courseLength })
+        {
+            if (Mathf.Abs(p.x) < reach && Mathf.Abs(p.z - z) < reach) return true;
+        }
+        return false;
     }
 
     /// <summary>放置植物並縮放 (size = 樹高，或 byWidth 時為寬度)；沒有 LOD 的模型加上遠距剔除</summary>

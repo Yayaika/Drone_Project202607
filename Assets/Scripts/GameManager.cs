@@ -37,6 +37,12 @@ public class GameManager : MonoBehaviour
     [Tooltip("開場倒數秒數，0 = 不倒數直接開始")]
     public int countdownSeconds = 3;
 
+    [Header("【 起飛位置 (競速) 】")]
+    [Tooltip("開場把無人機放在第一個檢查圈前方這個距離 (m)，並面向檢查圈")]
+    public float startDistanceBeforeFirstGate = 14f;
+    [Tooltip("起飛位置離地最低高度 (m)")]
+    public float startMinGroundClearance = 2.5f;
+
     [Header("【 UI 組件 】")]
     public TextMeshProUGUI timerText;          // TimerText
     public TextMeshProUGUI progressText;       // ProgressText
@@ -52,7 +58,7 @@ public class GameManager : MonoBehaviour
     // 檢查點重生
     private bool hasCheckpointRespawn;
     private Vector3 lastCheckpointPosition;
-    private Quaternion lastCheckpointRotation;
+    private Vector3 lastCheckpointFacing = Vector3.forward;
     private DroneController1 subscribedDrone;
 
     public float ElapsedTime => elapsedTime;
@@ -113,6 +119,8 @@ public class GameManager : MonoBehaviour
         // 賽道 (RaceManager / 城市生成器) 可能在本元件 Start 之後才設定總檢查點數，這裡重新整理顯示
         UpdateProgressUI();
         DroneController1 drone = GetDrone();
+        // 競速：不論場景出生點在哪，都改到第一個檢查圈前方並面向它
+        if (Mode == GameModeType.Race && drone != null) PlaceDroneAtCourseStart(drone);
         BindRespawn(drone);
         if (drone != null) drone.canControl = false;
 
@@ -178,10 +186,24 @@ public class GameManager : MonoBehaviour
     {
         hasCheckpointRespawn = true;
         lastCheckpointPosition = position;
-        Vector3 flat = new Vector3(facing.x, 0f, facing.z);
-        if (flat.sqrMagnitude < 0.001f) flat = Vector3.forward;
-        // DroneController1.RespawnAtCheckpoint 會自動加 180 度 (配合 City2 閘門朝向)，這裡先抵銷
-        lastCheckpointRotation = Quaternion.LookRotation(flat.normalized) * Quaternion.Euler(0f, 180f, 0f);
+        if (TryFlatDirection(facing, out Vector3 flat)) lastCheckpointFacing = flat;
+    }
+
+    /// <summary>
+    /// 傳給 DroneController1.RespawnAtCheckpoint 的旋轉，讓「玩家看到的前方」(第一人稱鏡頭/機頭) 朝向 facing。
+    /// 無人機模型的機頭是 transform 的 -Z，RespawnAtCheckpoint 內部會再加 180 度；
+    /// 這裡以鏡頭錨點實際量出機頭與 transform 的夾角，不依賴模型的擺放方向。
+    /// </summary>
+    private static Quaternion RespawnRotationFacing(DroneController1 drone, Vector3 facing)
+    {
+        float noseOffset = 0f;
+        if (TryFlatDirection(drone.transform.forward, out Vector3 body) && TryFlatDirection(drone.FirstPersonAnchor.forward, out Vector3 nose))
+        {
+            noseOffset = Vector3.SignedAngle(body, nose, Vector3.up);
+        }
+        float targetYaw = Quaternion.LookRotation(facing).eulerAngles.y;
+        // 機身 yaw = 目標 - 機頭偏角；再扣掉 RespawnAtCheckpoint 會加上的 180 度
+        return Quaternion.Euler(0f, targetYaw - noseOffset - 180f, 0f);
     }
 
     private void BindRespawn(DroneController1 drone)
@@ -192,7 +214,7 @@ public class GameManager : MonoBehaviour
         subscribedDrone = drone;
         drone.OnRespawnPressed += RespawnAtLastCheckpoint;
         // RaceManager 已先記錄起飛點時不要覆蓋
-        if (!hasCheckpointRespawn) RecordRespawnPoint(drone.transform.position, drone.transform.forward);
+        if (!hasCheckpointRespawn) RecordRespawnPoint(drone.transform.position, drone.FirstPersonAnchor.forward);
     }
 
     private void RespawnAtLastCheckpoint()
@@ -202,7 +224,101 @@ public class GameManager : MonoBehaviour
         DronePickupHandler pickup = subscribedDrone.GetComponent<DronePickupHandler>();
         if (pickup != null && pickup.IsCarrying) pickup.ForceDrop();
 
-        subscribedDrone.RespawnAtCheckpoint(lastCheckpointPosition, lastCheckpointRotation);
+        // 重生後面向下一個要穿越的檢查圈 (沒有檢查圈時沿用記錄的朝向)
+        Vector3 facing = lastCheckpointFacing;
+        RingTrigger next = FindCheckpoint(passedCheckpoints);
+        if (next != null && TryFlatDirection(next.transform.position - lastCheckpointPosition, out Vector3 toNext))
+        {
+            facing = toNext;
+        }
+        subscribedDrone.RespawnAtCheckpoint(lastCheckpointPosition, RespawnRotationFacing(subscribedDrone, facing));
+    }
+
+    private static RingTrigger FindCheckpoint(int index)
+    {
+        foreach (RingTrigger ring in RingTrigger.All)
+        {
+            if (ring != null && ring.checkpointIndex == index) return ring;
+        }
+        return null;
+    }
+
+    private static bool TryFlatDirection(Vector3 direction, out Vector3 flat)
+    {
+        flat = new Vector3(direction.x, 0f, direction.z);
+        if (flat.sqrMagnitude < 0.01f) return false;
+        flat.Normalize();
+        return true;
+    }
+
+    /// <summary>
+    /// 把無人機放到第一個檢查圈前方 (沿「第二圈 → 第一圈」的方向往後退)，高度與第一圈相同，面向第一圈。
+    /// 依序嘗試不同距離與偏角，選第一個不在建築內、離地足夠且看得到第一圈的位置；都不行時只轉向。
+    /// </summary>
+    private void PlaceDroneAtCourseStart(DroneController1 drone)
+    {
+        RingTrigger first = FindCheckpoint(0);
+        if (first == null) return;
+
+        Vector3 gate = first.transform.position;
+        RingTrigger second = FindCheckpoint(1);
+        if (!TryFlatDirection(second != null ? gate - second.transform.position : drone.transform.position - gate, out Vector3 back))
+        {
+            back = Vector3.back;
+        }
+
+        Vector3 start = drone.transform.position;
+        bool found = false;
+        float[] distanceScales = { 1f, 0.75f, 1.3f, 0.5f, 1.7f };
+        float[] yawOffsets = { 0f, 25f, -25f, 50f, -50f };
+        foreach (float yaw in yawOffsets)
+        {
+            foreach (float scale in distanceScales)
+            {
+                Vector3 candidate = gate + Quaternion.Euler(0f, yaw, 0f) * back * (startDistanceBeforeFirstGate * scale);
+                if (TryStartPoint(candidate, gate, drone.transform, out start))
+                {
+                    found = true;
+                    break;
+                }
+            }
+            if (found) break;
+        }
+        if (!found)
+        {
+            start = drone.transform.position;
+            Debug.LogWarning("[GameManager] 第一個檢查圈前方找不到安全的起飛位置，保留場景出生點，只轉向第一圈。");
+        }
+
+        if (!TryFlatDirection(gate - start, out Vector3 facing)) facing = -back;
+        Quaternion rotation = RespawnRotationFacing(drone, facing);
+        drone.RespawnAtCheckpoint(start, rotation);
+        // 起飛點的旋轉與 RespawnAtCheckpoint 參數同一套定義 (沒有 GameManager 時的備用重生也朝向第一圈)
+        drone.SetHomePoint(start, rotation);
+        RecordRespawnPoint(start, facing);
+    }
+
+    private bool TryStartPoint(Vector3 candidate, Vector3 gate, Transform drone, out Vector3 result)
+    {
+        result = candidate;
+        // 下方要有地面 (不在地圖外)，並保持離地高度
+        if (!Physics.Raycast(candidate + Vector3.up, Vector3.down, out RaycastHit ground, 120f, ~0, QueryTriggerInteraction.Ignore)) return false;
+        if (ground.transform.IsChildOf(drone)) return false;
+        result.y = Mathf.Max(candidate.y, ground.point.y + startMinGroundClearance);
+
+        // 周圍淨空
+        foreach (Collider hit in Physics.OverlapSphere(result, 1.5f, ~0, QueryTriggerInteraction.Ignore))
+        {
+            if (!hit.transform.IsChildOf(drone)) return false;
+        }
+
+        // 從檢查圈往起飛點看得到 (由外往內打射線，起飛點在建築內時會打到外牆)
+        Vector3 toStart = result - gate;
+        foreach (RaycastHit hit in Physics.RaycastAll(gate, toStart.normalized, toStart.magnitude, ~0, QueryTriggerInteraction.Ignore))
+        {
+            if (!hit.transform.IsChildOf(drone)) return false;
+        }
+        return true;
     }
 
     #endregion

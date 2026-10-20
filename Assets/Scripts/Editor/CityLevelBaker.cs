@@ -176,7 +176,7 @@ public static class CityLevelBaker
     public static void AssignStreetAssets(CityGenerator generator)
     {
         SerializedObject so = new SerializedObject(generator);
-        SetArray(so.FindProperty("streetLampPrefabs"), StreetPrefabs("StreetProps/TraficLights", "LampPost_D", "LampPost_J"));
+        SetArray(so.FindProperty("streetLampPrefabs"), StreetPrefabs("StreetProps/TraficLights", "LampPost_J"));
         // 植物：Anime Nature (Anime Trees)；Tree_01 面數過高 (9 萬) 不使用
         SetArray(so.FindProperty("treeModelPrefabs"), NaturePrefabs("Tree_02", "Tree_03", "Tree_04", "Tree_05", "Tree_06", "Tree_07", "Tree_08"));
         SetArray(so.FindProperty("bushPrefabs"), NaturePrefabs("Bush_"));

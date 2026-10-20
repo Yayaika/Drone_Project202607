@@ -1380,6 +1380,14 @@ public partial class CityGenerator
         DecoratePark(lotCenter, size.x, size.z);
     }
 
+    /// <summary>點是否落在廣場起飛平台 (8×8m) 外擴 margin 的範圍內，植物不可長在平台上</summary>
+    private bool NearTakeoffPad(Vector3 point, float margin)
+    {
+        if (plazaCenter == Vector3.zero) return false;
+        float reach = 4f + margin;
+        return Mathf.Abs(point.x - plazaCenter.x) < reach && Mathf.Abs(point.z - plazaCenter.z) < reach;
+    }
+
     /// <summary>在一塊綠地上散佈樹、灌木與草叢</summary>
     private void DecoratePark(Vector3 center, float sizeX, float sizeZ)
     {
@@ -1393,12 +1401,14 @@ public partial class CityGenerator
         for (int i = 0; i < bushes; i++)
         {
             Vector3 p = center + new Vector3(Range(-0.42f, 0.42f) * sizeX, 0.04f, Range(-0.42f, 0.42f) * sizeZ);
+            if (NearTakeoffPad(p, 2f)) continue;
             PlaceBush(p, Range(1.2f, 2.2f), false);
         }
         int grassCount = Mathf.Clamp(Mathf.RoundToInt(sizeX * sizeZ / 25f), 4, 20);
         for (int i = 0; i < grassCount; i++)
         {
             Vector3 p = center + new Vector3(Range(-0.45f, 0.45f) * sizeX, 0.04f, Range(-0.45f, 0.45f) * sizeZ);
+            if (NearTakeoffPad(p, 1.5f)) continue;
             PlaceGrass(p, Range(0.5f, 0.8f));
         }
         if (sidewalkPropPrefabs != null && Chance(0.6f))

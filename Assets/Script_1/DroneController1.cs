@@ -1262,6 +1262,13 @@ public class DroneController1 : MonoBehaviour
         if (positionText != null) positionText.text = $"Position:  X:{pos.x:F1}  Z:{pos.z:F1}";
         if (speedText != null) speedText.text = $"Speed:     {currentSpeed:F1} m/s";
     }
+    /// <summary>出生點被關卡改到別處後，更新起飛點 (HUD 相對高度、返航距離以此為準)</summary>
+    public void SetHomePoint(Vector3 position, Quaternion rotation)
+    {
+        initialPosition = position;
+        initialRotation = rotation;
+    }
+
     // 新增給 RaceManager 呼叫的專用重生函式
     public void RespawnAtCheckpoint(Vector3 newPos, Quaternion newRot)
     {

@@ -229,8 +229,9 @@ public class RaceManager : MonoBehaviour
         DroneController1 droneCtrl = droneTransform.GetComponent<DroneController1>();
         if (droneCtrl != null)
         {
-            // RespawnAtCheckpoint 會自動加 180 度 (舊版閘門朝向)，這裡先抵銷
-            droneCtrl.RespawnAtCheckpoint(startPosition + Vector3.up * 0.8f, Quaternion.LookRotation(startFacing) * Quaternion.Euler(0f, 180f, 0f));
+            // 無人機機頭是 transform 的 -Z，RespawnAtCheckpoint 會自動加 180 度讓機頭朝向 startFacing
+            // (競速模式的最終起飛位置與朝向由 GameManager 依第一個檢查圈重新設定)
+            droneCtrl.RespawnAtCheckpoint(startPosition + Vector3.up * 0.8f, Quaternion.LookRotation(startFacing));
         }
         if (GameManager.Instance != null)
         {

@@ -266,10 +266,10 @@ public class CityTraffic : MonoBehaviour
         bool blinkOn = Mathf.Repeat(Time.time, 0.8f) < 0.4f;
         foreach (SignalHead head in heads)
         {
-            Signal signal = GetSignal(head.Node, head.AlongX, out _);
-            // 行人燈：穿越此方向前方道路，需「另一向」為綠燈；剩 5 秒時閃爍
-            Signal cross = GetSignal(head.Node, !head.AlongX, out float crossRemaining);
-            int walk = cross == Signal.Green ? (crossRemaining < 5f && !blinkOn ? 2 : 1) : 0;
+            Signal signal = GetSignal(head.Node, head.AlongX, out float remaining);
+            // 行人燈：燈桿在路口對角，看燈的行人沿車流方向穿越「橫向道路」，
+            // 橫向車流此時為紅燈 = 本方向綠燈 (與 PedestrianMayCross 一致)；剩 5 秒時閃爍
+            int walk = signal == Signal.Green ? (remaining < 5f && !blinkOn ? 2 : 1) : 0;
             int state = (int)signal * 3 + walk;
             if (!force && state == head.Shown) continue;
             head.Shown = state;

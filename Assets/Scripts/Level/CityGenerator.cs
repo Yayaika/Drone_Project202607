@@ -67,6 +67,12 @@ public partial class CityGenerator : MonoBehaviour, IDeliverySpotProvider
     [SerializeField] private int defaultCheckpointCount = 8;
     [SerializeField] private float checkpointRadius = 3.5f;
 
+    [Header("地圖邊界 (空氣牆)")]
+    [Tooltip("空氣牆距離外環道路外緣的距離 (m)")]
+    [SerializeField] private float boundaryMargin = 20f;
+    [Tooltip("天花板高於最高建築設定值的距離 (m)")]
+    [SerializeField] private float boundaryCeilingClearance = 40f;
+
     private readonly Dictionary<GameObject, PolygonCityModels.Measurement> modelMeasurements =
         new Dictionary<GameObject, PolygonCityModels.Measurement>();
     // 生成結果 (烘焙後隨場景保存)
@@ -96,13 +102,26 @@ public partial class CityGenerator : MonoBehaviour, IDeliverySpotProvider
             plazaBlock = blocks / 2;
             MoveSpawnerToPlaza();
             if (root != null) SpawnCityLife();
+            BuildMapBoundary();
         }
         else if (generateOnAwake)
         {
             Generate();
             MoveSpawnerToPlaza();
             SpawnCityLife();
+            BuildMapBoundary();
         }
+    }
+
+    /// <summary>城市外圍空氣牆：外環道路再往外留一段緩衝，天花板高於最高建築</summary>
+    private void BuildMapBoundary()
+    {
+        float limit = HalfSpan + boundaryMargin;
+        Vector3 center = transform.position;
+        MapBoundary.Build(transform,
+            new Vector2(center.x - limit, center.z - limit),
+            new Vector2(center.x + limit, center.z + limit),
+            center.y, center.y + maxBuildingHeight + boundaryCeilingClearance);
     }
 
     private void Start()

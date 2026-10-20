@@ -1,5 +1,6 @@
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
@@ -100,6 +101,8 @@ public class DroneFlightHUD : MonoBehaviour
 
         toggleSettingsAction = new InputAction("ToggleSettings", binding: "<Keyboard>/escape");
         toggleSettingsAction.AddBinding("<Gamepad>/start");
+        // VR 手把：左手 Menu 鍵
+        toggleSettingsAction.AddBinding("<XRController>{LeftHand}/{MenuButton}");
     }
 
     private InputAction toggleSettingsAction;
@@ -504,6 +507,32 @@ public class DroneFlightHUD : MonoBehaviour
         if (open == pausedBySettings) return;
         pausedBySettings = open;
         Time.timeScale = open ? 0f : 1f;
+        SyncSettingsSelection(open);
+    }
+
+    /// <summary>
+    /// 手把操作 UI 需要「目前選取的按鈕」才能用搖桿/方向鍵移動、A 鍵確認：
+    /// 開啟面板時預選第一個可互動元件，關閉時清掉面板內的選取 (避免 A 鍵誤觸看不見的按鈕)。
+    /// </summary>
+    private void SyncSettingsSelection(bool open)
+    {
+        EventSystem eventSystem = EventSystem.current;
+        if (eventSystem == null || settingsPanel == null) return;
+
+        if (open)
+        {
+            foreach (Selectable selectable in settingsPanel.GetComponentsInChildren<Selectable>())
+            {
+                if (!selectable.IsInteractable()) continue;
+                eventSystem.SetSelectedGameObject(selectable.gameObject);
+                return;
+            }
+        }
+        else if (eventSystem.currentSelectedGameObject != null
+                 && eventSystem.currentSelectedGameObject.transform.IsChildOf(settingsPanel.transform))
+        {
+            eventSystem.SetSelectedGameObject(null);
+        }
     }
 
     #endregion

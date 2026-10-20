@@ -248,6 +248,25 @@
   - 不擋賽道：所有可抽中的賽道 Spline 水平 3.5m 內與起點 6m 內不放；放置後以 OverlapBox 檢查，碰到建築或其他物件即移除，避免穿模；碰撞體與模型同形 (街道設施 MeshCollider、車輛方盒、樹幹膠囊)。
 - **相關檔案：** `Scenes/City2.unity`、`Scripts/Editor/City2Decorator.cs`、`Scripts/Editor/CityLevelBaker.cs`
 
+## D-024：地圖空氣牆、起飛朝向第一圈、路燈與草叢位置修正
+
+- **日期：** 2026-10-20
+- **狀態：** 已確認（使用者要求）
+- **決定：**
+  - 空氣牆：新增 `Level/MapBoundary.cs`，執行時建立四面牆＋天花板 (只有 BoxCollider、無外觀)。程序化城市 (`CityGenerator`) 牆在外環道路外 20m、天花板 = 最高樓設定 + 40m；訓練場 (`CourseBuilder`) 左右 ±60m、起終點外 40m、天花板 45m。City2 沿用場景內既有 BoundWall。
+  - 競速開場：`GameManager.StartSequence` 把無人機放在第一個檢查圈前方 14m (沿「第二圈→第一圈」反方向、與第一圈同高、離地 ≥2.5m)，機頭面向第一圈；位置被擋時改試其他距離/偏角，全部失敗才保留場景出生點只轉向。不再依賴各場景 Spawner 的固定位置。
+  - 機頭方向：無人機模型的機頭 (第一人稱鏡頭) 是 transform 的 -Z，`DroneController1.RespawnAtCheckpoint` 內建 +180°。原 `GameManager.RecordRespawnPoint` 又抵銷 180° 導致 R 重生後背對前進方向；改為以 `FirstPersonAnchor` 量出機頭偏角後計算旋轉。R 重生面向「下一個要穿的檢查圈」。
+  - 紅綠燈：`LampPost_D` 是「路燈＋紅綠燈」模型，被當路燈擺在路段中間；City2 / 住宅區 / 市中心 / 開始選單的 LampPost_D 全部換成純路燈 `LampPost_J` (同位置同朝向)，生成工具也只用 LampPost_J。`CityTraffic` 行人燈改為「本方向綠燈才可通行」(原本與車流相反)。
+  - 草叢：刪除 City2 12 叢浮在商店屋頂/路面上方 1.4–6.3m 的草；住宅區/市中心刪除長在長椅上的草與灌木；廣場植物避開起飛平台、訓練場植物避開起終點平台。
+- **相關檔案：** `Scripts/Level/MapBoundary.cs`、`GameManager.cs`、`DroneController1.cs`、`Mapscript/RaceManger.cs`、`CourseBuilder.cs`、`Level/CityGenerator*.cs`、`Level/CityTraffic.cs`、`Editor/CityLevelBaker.cs`、`Editor/City2Decorator.cs`、4 個場景
+
+## D-025：HUD 設置面板手把操作
+
+- **日期：** 2026-10-20
+- **狀態：** 已確認
+- **決定：** 設置面板開啟時自動選取第一個可互動元件 (手把搖桿導覽、A 鍵確認才有起點)，關閉時清除選取；開關鍵新增 VR 左手 Menu 鍵 (原有 ESC、手把 Start)。VR 手把射線點擊沿用 XRUIInputModule + TrackedDeviceGraphicRaycaster。
+- **相關檔案：** `Script_1/DroneFlightHUD.cs`
+
 ## 後續決策
 
 新增決策時複製以下格式：
