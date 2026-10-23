@@ -16,7 +16,8 @@ public enum GameSfx
     Delivered,
     CargoBroken,
     Crash,
-    Warning
+    Warning,
+    DialoguePop
 }
 
 public enum GameMusic
@@ -60,6 +61,7 @@ public static class GameAudio
         GameSfx.CargoBroken => "cargo_broken",
         GameSfx.Crash => "drone_crash",
         GameSfx.Warning => "warning_beep",
+        GameSfx.DialoguePop => "ui_dialogue_pop",
         _ => sfx.ToString()
     };
 
@@ -75,6 +77,15 @@ public static class GameAudio
     public static void Play(GameSfx sfx, float volumeScale = 1f)
     {
         AudioClip clip = LoadSfx(sfx);
+        if (clip == null) return;
+
+        EnsureSources();
+        sfxSource.PlayOneShot(clip, volumeScale);
+    }
+
+    /// <summary>播放指定的音效檔 (與其他音效共用同一個 2D 音源)</summary>
+    public static void PlayClip(AudioClip clip, float volumeScale = 1f)
+    {
         if (clip == null) return;
 
         EnsureSources();

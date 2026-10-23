@@ -39,6 +39,7 @@ public static class CityLevelBaker
             if (!level.BakedCity) continue;
             string path = "Assets/Scenes/" + level.SceneName + ".unity";
             lines.Add(BakeLevel(level, path));
+            lines.Add(OutskirtsSceneryBuilder.Build(path)); // 重新烘焙會重建場景，外圍景觀一併重建
             scenes.Add(path);
         }
 

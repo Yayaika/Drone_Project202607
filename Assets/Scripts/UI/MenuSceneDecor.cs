@@ -312,7 +312,7 @@ public class MenuSceneDecor : MonoBehaviour
         return disc.transform;
     }
 
-    /// <summary>選中的無人機在展示台上緩慢旋轉並懸浮</summary>
+    /// <summary>選中的無人機在展示台上緩慢旋轉並懸浮 (螺旋槳保持靜止)</summary>
     private void UpdateShowcase(float t, float dt)
     {
         if (selectController == null || selectController.charOptions == null) return;
@@ -335,13 +335,16 @@ public class MenuSceneDecor : MonoBehaviour
             // 只保留航向，水平旋轉 (原本的前傾角在轉盤上會變成大幅側傾)
             showcaseBaseRotation = Quaternion.Euler(0f, active.transform.eulerAngles.y, 0f);
             showcaseBasePosition = active.transform.position;
-            CollectProps(active.transform, showcaseProps);
+            // 部分模型 (drone.prefab) 的槳葉 fan.00x 掛有循環旋轉動畫，展示時停住
+            foreach (Animator animator in active.GetComponentsInChildren<Animator>(true))
+            {
+                if (animator.name.StartsWith("fan", System.StringComparison.OrdinalIgnoreCase)) animator.enabled = false;
+            }
         }
 
         turntableAngle += turntableSpeed * dt;
         active.transform.position = showcaseBasePosition + Vector3.up * (Mathf.Sin(t * 1.5f) * 0.08f);
         active.transform.rotation = Quaternion.AngleAxis(turntableAngle, Vector3.up) * showcaseBaseRotation;
-        SpinProps(showcaseProps, dt);
 
         if (pedestal != null)
         {
@@ -350,7 +353,6 @@ public class MenuSceneDecor : MonoBehaviour
         }
     }
 
-    private readonly List<Transform> showcaseProps = new List<Transform>();
     private Quaternion showcaseBaseRotation;
     private Vector3 showcaseBasePosition;
 

@@ -46,6 +46,8 @@
 | 有機城市生成器（獨立測試） | 部分完成（已在 Editor 生成並截圖確認、Play 中重建可用） | `Level/OrganicCityGenerator.cs`、`Level/OrganicCityFlyCamera.cs`、`Editor/OrganicCityGeneratorEditor.cs`、`Scenes/OrganicCityTest.unity`、`Materials/OrganicCity/` | 未接入關卡/玩法；建築已改用 POLYGON city pack 模型（放不下時少量方塊大樓補空）；街道設施與樹木使用 LowpolyStreetPack（規則可在 Inspector 新增）；中央圓環預設關閉；鍵盤操作未經實機按鍵測試 |
 | 面板（設置/操作說明/介紹） | 部分完成（待實測） | `UI/PanelEnhancer.cs`、`UI/ControlsHelp.cs`、`UI/UIPopupPanel.cs`：彈出動畫、按鍵圖示操作說明、音量百分比、返回選單、依模式顯示過關目標 | 版面需在畫面上確認 |
 | 音效 | 部分完成 | `Audio/GameAudio.cs`（依檔名從 Resources/Audio 載入，缺檔時用 `SynthSfx` 合成 placeholder）；引擎音高隨轉速變化；起飛音效已指定 | **缺 UI/倒數/檢查點/搬運/撞擊/警告音效與 BGM**，見 `ASSET_REQUESTS.md` |
+| 空氣牆外圍景觀 | 部分完成（5 個關卡 Scene 視圖截圖確認；住宅區 Play Mode 確認顯示正常，約 +23 萬面、+170 批次） | `Editor/OutskirtsSceneryBuilder.cs`（選單 12，D-030） | VR 實機效能未測；建築為方塊 placeholder 等級 |
+| 開場動畫（開始選單） | 部分完成（Play Mode 確認：鏡頭繞行、字幕打字與彈出、滑鼠點擊跳過、播完/跳過後進入選擇無人機；彈出音效使用 Button Pop.wav） | `Cutscene/IntroCutscene.cs`、`Cutscene/Dialogue*.cs`、`Cutscenes/IntroCutscene.playable`（選單 13，D-031） | VR 實機射線點擊與舒適度未測；角色頭像為文字 placeholder |
 | 存檔／設定 | 部分完成 | 音量（`VolumeController`，PlayerPrefs）、排行榜（PlayerPrefs JSON） | — |
 
 ## 3. 已知錯誤與風險
@@ -61,6 +63,8 @@
 
 ## 4. 最近完成的工作
 
+- 2026-10-24：開始選單按「開始」後播放約 30 秒可跳過的開場動畫（Timeline，兩人對話說明遊戲動機，D-031）
+- 2026-10-24：所有關卡空氣牆外加入外圍景觀（山脈、丘陵森林、郊區建築、農田、道路、海灣/離島），選單 12 可重建（D-030）
 - 2026-10-20：新增打擊模式（投彈／撞擊／移動車輛目標，D-026）與專屬場景「港區・打擊演習」（D-028）；HUD 永遠顯示在最上層（D-027）；HUD 設置按鈕恢復可點擊（D-029）
 - 2026-10-20：地圖空氣牆、競速開場放在第一圈前方並面向它、R 重生面向下一圈 (修正背對前進方向)、路段紅綠燈模型換成路燈、行人燈時相修正、不合理草叢清除、HUD 設置面板手把預選 (D-024、D-025)
 - 2026-10-20：City2 移到世界中心 (路面 y=0)，以選單 10 工具加入路燈 30、行道樹 21、街道設施 41、停車場車輛 30、空地植物 165（D-023）；飛控反應加快與水平速度輔助（D-021、D-022）

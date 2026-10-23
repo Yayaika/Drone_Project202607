@@ -304,6 +304,33 @@
 - **決定：** `DroneFlightHUD` 執行時啟用 HUD 根 Canvas 的 GraphicRaycaster，並為設置按鈕的巢狀 Canvas 補上 GraphicRaycaster 與根 Canvas 相同類型的 VR Raycaster。
 - **相關檔案：** `Script_1/DroneFlightHUD.cs`、`UI/HudAlwaysOnTop.cs`
 
+## D-030：空氣牆外圍景觀
+
+- **日期：** 2026-10-24
+- **狀態：** 已確認（使用者要求：所有遊戲場景的空氣牆外要有山、樹、房子或海等裝飾）
+- **決定：**
+  - 新增編輯器工具「無人機遊戲/12. 建立空氣牆外圍景觀 (所有關卡)」(`Editor/OutskirtsSceneryBuilder.cs`)，為 SampleScene、City2、CityResidential、CityDowntown、StrikePort 在場景根物件「OutskirtsScenery」下烘焙：低多邊形地形（近郊平地 → 丘陵 → 雪山，依坡度/高度分草地、森林、岩石、雪、沙灘）、外環道路與聯外道路、方塊郊區建築（窗帶/格子窗、一樓店面、頂樓水塔）、農田、程序化低面數樹。
+  - 各場景主題：住宅區＝盆地郊區＋環山；市中心＝外圍高樓＋南側海灣；City2＝城鎮＋東側海灣；訓練場＝鄉間農田森林；港區＝北方對岸港鎮與山＋3 座離島（沿用場景原有海面）。
+  - 可遊玩範圍直接讀取 CityGenerator / StrikeArena / CourseBuilder 參數或 City2 的 BoundWall，與 MapBoundary 一致；物件距空氣牆內側 ≥12m。
+  - 純裝飾：無碰撞體；網格合併成每象限一個物件（每種材質一個子網格），地形與山林不投影；網格存於 `Assets/GeneratedLevels/<場景>/Outskirts`，材質於 `Assets/Materials/Outskirts`。
+  - 相機遠裁切面為 1000m：地形最遠距離 = clamp(940 − 2×場地半寬, 450, 800)，從場地另一側看山稜仍在裁切面內。
+  - 不使用 Anime Trees（每棵 1–9 萬面）與 LowpolyStreetPack 樹（遠看像枯樹）；不使用 POLYGON 建築模型（每棟數千至數萬面）。
+  - 選單 7 重新烘焙住宅區/市中心時會自動重建外圍景觀。
+- **相關檔案：** `Scripts/Editor/OutskirtsSceneryBuilder.cs`、`Scripts/Editor/CityLevelBaker.cs`、5 個關卡場景
+
+## D-031：開始選單開場動畫 (Timeline，可跳過)
+
+- **日期：** 2026-10-24
+- **狀態：** 已確認（使用者要求：按開始後播放可跳過的動畫、畫面有跳過按鈕、兩人對話說明遊戲動機；後續要求縮短、虛擬手把可點跳過、每句對話有彈出音效）
+- **決定：**
+  - 使用 Unity Timeline：`Assets/Cutscenes/IntroCutscene.playable`，「Camera Rig」動畫軌道移動 XR Origin 根物件（只轉水平方向，VR 不傾斜地平線），從選單升空繞行背景城市；自訂「Dialogue」軌道（`DialogueTrack` / `DialogueClip`）驅動字幕，可在 Timeline 視窗調整台詞與時間。
+  - 故事：林教官與新手阿哲，城市塞車、空中救援隊招募飛手，需通過競速、搬運、打擊演習三項考驗。6 句、約 30 秒。
+  - 字幕介面為掛在 Main Camera 前 1.2m 的世界空間 Canvas（GraphicRaycaster + TrackedDeviceGraphicRaycaster），滑鼠與 VR 手把射線都能點「跳過」；鍵盤 Space/Enter/Esc、手把 B/Start、VR 手把 B/Y 也可跳過；開始後 0.6 秒內不接受跳過。
+  - 每句對話彈出時播放專案內既有的 `Samples/XR Interaction Toolkit/.../Button Pop.wav`（未指定時退回 GameAudio 的 `DialoguePop` 合成音）。
+  - 開始按鈕原本的 `SceneChanger.LoadScene("PlayerSelectSettings")` 改為 `IntroCutscene.Play`，播完或跳過後經 SceneLoader 載入原場景。`onlyFirstTime` 選項可改為只播第一次（預設關閉）。
+  - 由選單「無人機遊戲/13. 建立開場動畫 (開始選單)」(`Editor/IntroCutsceneBuilder.cs`) 建立；重新執行會覆蓋 Timeline 資產。
+- **相關檔案：** `Scripts/Cutscene/IntroCutscene.cs`、`Scripts/Cutscene/DialogueClip.cs`、`Scripts/Cutscene/DialogueTrack.cs`、`Scripts/Editor/IntroCutsceneBuilder.cs`、`Scripts/Audio/GameAudio.cs`、`Scripts/Audio/SynthSfx.cs`、`Scenes/StartMenu.unity`、`Cutscenes/`
+
 ## 後續決策
 
 新增決策時複製以下格式：
