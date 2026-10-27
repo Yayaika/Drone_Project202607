@@ -15631,24 +15631,24 @@ MonoBehaviour:
   isGrounded: 1
   isInverted: 1
   maxThrust: 40
-  altitudeHoldStrength: 8
+  altitudeHoldStrength: 12
   horizontalSpeedBoost: 0
-  maxClimbRate: 7
-  maxDescentRate: 4
-  maxVerticalAcceleration: 13
+  maxClimbRate: 11
+  maxDescentRate: 7
+  maxVerticalAcceleration: 21
   motorResponseTime: 0.05
   baseMass: 1
   payloadMass: 0
   cruisePitchAngle: -12
   maxTiltAngle: 25
-  maxYawRate: 300
+  maxYawRate: 180
   stabilizerStrength: 40
   bodyAngularDamping: 2
   attitudeDamping: 5.5
   attitudeGain: 2
   stickExpo: 0.3
   stickResponse: 18
-  yawAcceleration: 2000
+  yawAcceleration: 1100
   payloadAgilityLoss: 0.35
   turbulenceStrength: 0.25
   linearDrag: 0.15

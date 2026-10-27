@@ -181,20 +181,55 @@ public static class PanelEnhancer
         RectTransform msgBox = settingPanel.Find("MsgBox") as RectTransform;
         if (msgBox == null) return;
 
-        Color textColor = new Color(0.1f, 0.1f, 0.12f);
+        // 版面 (MsgBox 1000 x 600，中心為原點)，與模式選擇 / HUD 設置面板一致的深色圓角卡片：
+        //   標題 / 副標題 / 分隔線
+        //   音量  [==========滑桿==========]  50%
+        //   [ 操作說明 ]        [ 製作名單 ]
+        //              [ 返回 ]
+        Image card = msgBox.GetComponent<Image>();
+        if (card != null)
+        {
+            card.sprite = RuntimeUI.RoundedSprite;
+            card.type = Image.Type.Sliced;
+            card.color = RuntimeUI.PanelColor;
+            Outline outline = card.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color(RuntimeUI.AccentColor.r, RuntimeUI.AccentColor.g, RuntimeUI.AccentColor.b, 0.6f);
+            outline.effectDistance = new Vector2(3f, -3f);
+        }
 
-        // 說明副標題
+        // 左上角的「+」裝飾圖示與新版面不搭，執行時隱藏 (場景檔不變)
+        Transform icon = msgBox.Find("[Image]UI");
+        if (icon != null) icon.gameObject.SetActive(false);
+
+        // 標題：場景中不在按鈕內的 TMP 文字
+        foreach (TextMeshProUGUI text in msgBox.GetComponentsInChildren<TextMeshProUGUI>(true))
+        {
+            if (text.GetComponentInParent<Button>(true) != null) continue;
+            text.text = "設置";
+            text.fontSize = 56f;
+            text.fontStyle = FontStyles.Bold;
+            text.color = RuntimeUI.AccentColor;
+            text.alignment = TextAlignmentOptions.Center;
+            SetRect(text, new Vector2(0f, 228f), new Vector2(400f, 70f));
+            break;
+        }
+
+        // 說明副標題與分隔線
         TextMeshProUGUI subtitle = RuntimeUI.CreateText("SettingsSubtitle", msgBox, "調整音量、查看操作說明與製作名單", 26f,
-            new Vector2(0f, 30f), new Vector2(800f, 36f));
-        subtitle.color = new Color(0.35f, 0.35f, 0.4f);
+            new Vector2(0f, 172f), new Vector2(800f, 36f));
+        subtitle.color = new Color(1f, 1f, 1f, 0.6f);
+        RuntimeUI.CreateImage("Divider", msgBox, new Vector2(0f, 135f), new Vector2(860f, 2f),
+            new Color(RuntimeUI.AccentColor.r, RuntimeUI.AccentColor.g, RuntimeUI.AccentColor.b, 0.35f));
 
-        // 音量列
-        TextMeshProUGUI label = RuntimeUI.CreateText("VolumeLabel", msgBox, "音量", 34f, new Vector2(-360f, -40f), new Vector2(140f, 50f));
-        label.color = textColor;
-        Slider slider = CreateSlider(msgBox, new Vector2(10f, -40f), new Vector2(520f, 36f));
-        StyleSlider(slider, new Color(0.82f, 0.84f, 0.86f), new Color(0.1f, 0.7f, 0.55f), new Color(0.2f, 0.22f, 0.25f));
-        TextMeshProUGUI percent = RuntimeUI.CreateText("VolumePercent", msgBox, "", 30f, new Vector2(360f, -40f), new Vector2(120f, 50f));
-        percent.color = textColor;
+        // 音量列：標籤、滑桿、百分比各佔一欄，不互相重疊
+        TextMeshProUGUI label = RuntimeUI.CreateText("VolumeLabel", msgBox, "音量", 36f,
+            new Vector2(-350f, 50f), new Vector2(160f, 56f), TextAlignmentOptions.Left);
+        label.color = Color.white;
+        Slider slider = CreateSlider(msgBox, new Vector2(20f, 50f), new Vector2(520f, 32f));
+        StyleSlider(slider, new Color(0.15f, 0.2f, 0.26f), RuntimeUI.AccentColor, Color.white);
+        TextMeshProUGUI percent = RuntimeUI.CreateText("VolumePercent", msgBox, "", 34f,
+            new Vector2(370f, 50f), new Vector2(120f, 56f), TextAlignmentOptions.Right);
+        percent.color = RuntimeUI.AccentColor;
 
         float saved = PlayerPrefs.GetFloat(VolumePrefsKey, AudioListener.volume);
         AudioListener.volume = saved;
@@ -208,15 +243,22 @@ public static class PanelEnhancer
             percent.text = $"{value * 100f:0}%";
         });
 
-        // 操作說明按鈕：複製「製作名單」按鈕以維持一致外觀，放在左右對稱位置
+        // 返回按鈕：底部置中並加大
+        Transform backTransform = msgBox.Find("[BTN]返回");
+        if (backTransform != null)
+        {
+            StyleMainMenuButton(backTransform.GetComponent<Button>(), "返回", new Vector2(0f, -205f), new Vector2(260f, 72f), 34f);
+        }
+
+        // 操作說明按鈕：複製「製作名單」按鈕以維持一致外觀，兩顆同尺寸左右對稱
         Transform creditsButton = msgBox.Find("[BTN]製作名單");
         if (creditsButton != null)
         {
+            StyleMainMenuButton(creditsButton.GetComponent<Button>(), "製作名單", new Vector2(200f, -70f), new Vector2(360f, 96f), 40f);
             GameObject helpObject = Object.Instantiate(creditsButton.gameObject, msgBox);
             helpObject.name = "[BTN]操作說明";
             RectTransform helpRect = (RectTransform)helpObject.transform;
-            RectTransform creditsRect = (RectTransform)creditsButton;
-            helpRect.anchoredPosition = new Vector2(-creditsRect.anchoredPosition.x, creditsRect.anchoredPosition.y);
+            helpRect.anchoredPosition = new Vector2(-200f, -70f);
 
             Button helpButton = helpObject.GetComponent<Button>();
             for (int i = 0; i < helpButton.onClick.GetPersistentEventCount(); i++)
@@ -225,7 +267,7 @@ public static class PanelEnhancer
             }
 
             foreach (Text legacy in helpObject.GetComponentsInChildren<Text>(true)) legacy.text = "操作說明";
-            foreach (TextMeshProUGUI tmp in helpObject.GetComponentsInChildren<TextMeshProUGUI>(true)) tmp.text = "操作說明";
+            foreach (TextMeshProUGUI tmp in helpObject.GetComponentsInChildren<TextMeshProUGUI>(true)) tmp.text = "<sprite name=\"help\"> 操作說明";
 
             Canvas canvas = settingPanel.GetComponentInParent<Canvas>(true);
             UIPopupPanel helpPopup = null;
@@ -243,13 +285,43 @@ public static class PanelEnhancer
             //   操作說明  製作名單
             //   返回
             Selectable credits = creditsButton.GetComponent<Selectable>();
-            Transform backTransform = msgBox.Find("[BTN]返回");
             Selectable back = backTransform != null ? backTransform.GetComponent<Selectable>() : null;
             SetNavigation(slider, null, helpButton, null, null);
             SetNavigation(helpButton, slider, back, null, credits);
             SetNavigation(credits, slider, back, helpButton, null);
             if (back != null) SetNavigation(back, helpButton, null, null, credits);
         }
+    }
+
+    /// <summary>主選單面板按鈕：深色圓角底、白字、置中定位 (舊版 Text 換成 TMP，才能使用中文字型與按鍵圖示)</summary>
+    private static void StyleMainMenuButton(Button button, string label, Vector2 position, Vector2 size, float fontSize)
+    {
+        if (button == null) return;
+        SetRect(button, position, size);
+        ((RectTransform)button.transform).pivot = new Vector2(0.5f, 0.5f);
+
+        Text legacy = button.GetComponentInChildren<Text>(true);
+        if (legacy != null && button.GetComponentInChildren<TextMeshProUGUI>(true) == null)
+        {
+            GameObject labelObject = legacy.gameObject;
+            Object.DestroyImmediate(legacy);
+            labelObject.AddComponent<TextMeshProUGUI>();
+        }
+
+        ControlsHelp.StyleButton(button, label);
+        TextMeshProUGUI text = button.GetComponentInChildren<TextMeshProUGUI>(true);
+        if (text != null)
+        {
+            text.fontSize = fontSize;
+            text.alignment = TextAlignmentOptions.Center;
+            text.textWrappingMode = TextWrappingModes.NoWrap;
+            RuntimeUI.Stretch(text.rectTransform);
+        }
+
+        Outline outline = button.GetComponent<Outline>();
+        if (outline == null) outline = button.gameObject.AddComponent<Outline>();
+        outline.effectColor = new Color(RuntimeUI.AccentColor.r, RuntimeUI.AccentColor.g, RuntimeUI.AccentColor.b, 0.45f);
+        outline.effectDistance = new Vector2(2f, -2f);
     }
 
     private static void SetNavigation(Selectable selectable, Selectable up, Selectable down, Selectable left, Selectable right)

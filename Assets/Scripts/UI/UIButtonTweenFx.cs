@@ -28,6 +28,8 @@ public class UIButtonTweenFx : MonoBehaviour,
     private Outline selectionGlow;
     private bool hovered;
     private bool selected;
+    // 只控制自己的縮放動畫；不可用 transform.DOKill()，會連同 UITween.StaggerIn 的位移動畫一起中斷，使按鈕停在錯位的位置
+    private Tween scaleTween;
 
     private void Awake()
     {
@@ -50,7 +52,7 @@ public class UIButtonTweenFx : MonoBehaviour,
 
     private void OnDisable()
     {
-        transform.DOKill();
+        scaleTween?.Kill();
         transform.localScale = baseScale;
         hovered = false;
         selected = false;
@@ -61,6 +63,13 @@ public class UIButtonTweenFx : MonoBehaviour,
 
     /// <summary>目前是否顯示選中回饋 (選取發生在本元件安裝前時，由 GamepadUINavigator 補上)</summary>
     public bool IsShowingSelection => selected;
+
+    /// <summary>調整滑入 / 選中與按下的縮放倍率 (並排的大卡片設為 1 可保持同樣大小)</summary>
+    public void SetScaleFeedback(float hover, float press)
+    {
+        hoverScale = hover;
+        pressScale = press;
+    }
 
     public void OnPointerEnter(PointerEventData eventData)
     {
@@ -136,15 +145,15 @@ public class UIButtonTweenFx : MonoBehaviour,
     private void OnClicked()
     {
         GameAudio.Play(GameSfx.UIClick);
-        transform.DOKill();
+        scaleTween?.Kill();
         transform.localScale = baseScale * (hovered || selected ? hoverScale : 1f);
-        transform.DOPunchScale(baseScale * 0.12f, 0.25f, 8, 0.8f).SetUpdate(true);
+        scaleTween = transform.DOPunchScale(baseScale * 0.12f, 0.25f, 8, 0.8f).SetUpdate(true);
     }
 
     private void TweenTo(float multiplier, Ease ease)
     {
-        transform.DOKill();
-        transform.DOScale(baseScale * multiplier, duration).SetEase(ease).SetUpdate(true);
+        scaleTween?.Kill();
+        scaleTween = transform.DOScale(baseScale * multiplier, duration).SetEase(ease).SetUpdate(true);
     }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]

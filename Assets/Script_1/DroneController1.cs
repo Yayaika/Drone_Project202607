@@ -100,6 +100,16 @@ public class DroneController1 : MonoBehaviour
     [Header("【模擬電池 (Simulated Battery)】")]
     [Tooltip("懸停狀態下電量從 100% 用到 0% 所需秒數")]
     [SerializeField] private float batteryHoverSeconds = 600f;
+    [Tooltip("碰撞扣電：每 1 m/s 撞擊速度扣除的電量 (%)")]
+    [SerializeField] private float crashBatteryDrainPerSpeed = 0.4f;
+    [Tooltip("單次碰撞扣電的下限 / 上限 (%)")]
+    [SerializeField] private float crashBatteryDrainMin = 1f;
+    [SerializeField] private float crashBatteryDrainMax = 5f;
+    [Tooltip("連續擦撞時兩次扣電的最短間隔 (秒)")]
+    [SerializeField] private float crashBatteryCooldown = 0.5f;
+    [Tooltip("低於此撞擊速度的著陸 (地面/屋頂法線) 不扣電 (m/s)")]
+    [SerializeField] private float hardLandingSpeed = 8f;
+    private float lastCrashDrainTime = -10f;
 
     [Header("【螺旋槳視覺效果 (Propeller Visuals)】")]
     [SerializeField] private GameObject[] propellers;
@@ -233,6 +243,8 @@ public class DroneController1 : MonoBehaviour
     /// <summary>目前推力佔最大推力的比例 (0~1)</summary>
     public float Throttle01 => maxThrust > 0f ? Mathf.Clamp01(lastThrustAcceleration / maxThrust) : 0f;
     public float BatteryPercent => batteryPercent;
+    /// <summary>最近一次碰撞扣除的電量 (%)，0 = 該次碰撞未扣電 (HUD 顯示用)</summary>
+    public float LastCrashBatteryDrain { get; private set; }
     public Vector3 HomePosition => initialPosition;
     public bool IsTouchingObstacle => isTouchingWall;
     public float PitchAngle => NormalizeAngle(transform.eulerAngles.x);
@@ -291,7 +303,7 @@ public class DroneController1 : MonoBehaviour
 
     private void OnToggleModePerformed(InputAction.CallbackContext _) { if (canControl) ToggleFlightMode(); }
     private void OnSwitchCamPerformed(InputAction.CallbackContext _) => SwitchCamera();
-    private void OnRespawnPerformed(InputAction.CallbackContext _) { if (canControl) Respawn(); }
+    private void OnRespawnPerformed(InputAction.CallbackContext _) { if (canControl) RequestRespawn(); }
     private void OnToggleInvertPerformed(InputAction.CallbackContext _) => ToggleInvertControls();
 
     private void OnDisable()
@@ -572,6 +584,7 @@ public class DroneController1 : MonoBehaviour
         float impactSpeed = collision.relativeVelocity.magnitude;
         if (impactSpeed > 1.5f)
         {
+            ApplyCrashBatteryDrain(collision, impactSpeed);
             OnCrash?.Invoke(impactSpeed);
             Vector3 impactPoint = collision.contactCount > 0 ? collision.GetContact(0).point : transform.position;
             GameAudio.PlayAt(GameSfx.Crash, impactPoint, Mathf.Clamp01(impactSpeed / 10f));
@@ -652,6 +665,21 @@ public class DroneController1 : MonoBehaviour
         float hoverRatio = maxThrust > 0f ? Mathf.Abs(Physics.gravity.y) / maxThrust : 0.25f;
         float load = isGrounded ? 0.1f : Mathf.Max(Throttle01, 0.05f) / Mathf.Max(hoverRatio, 0.05f);
         batteryPercent = Mathf.Max(0f, batteryPercent - load * 100f / batteryHoverSeconds * Time.deltaTime);
+    }
+
+    /// <summary>碰撞扣除小幅電量 (依撞擊速度)；一般著陸與連續擦撞的重複觸發不扣</summary>
+    private void ApplyCrashBatteryDrain(Collision collision, float impactSpeed)
+    {
+        LastCrashBatteryDrain = 0f;
+        if (!isArmed || Time.time - lastCrashDrainTime < crashBatteryCooldown) return;
+
+        bool landing = collision.contactCount > 0 && collision.GetContact(0).normal.y > groundNormalThreshold;
+        if (landing && impactSpeed < hardLandingSpeed) return;
+
+        float drain = Mathf.Clamp(impactSpeed * crashBatteryDrainPerSpeed, crashBatteryDrainMin, crashBatteryDrainMax);
+        LastCrashBatteryDrain = Mathf.Min(drain, batteryPercent);
+        batteryPercent = Mathf.Max(0f, batteryPercent - drain);
+        lastCrashDrainTime = Time.time;
     }
 
     public void RechargeBattery()
@@ -1072,6 +1100,15 @@ public class DroneController1 : MonoBehaviour
         Vector3 headOffset = anchor.InverseTransformPoint(trackedCamera.transform.position);
         xrOriginTransform.localPosition -= new Vector3(headOffset.x, 0f, headOffset.z);
         return true;
+    }
+
+    /// <summary>R / 手把 B：先彈出確認視窗，避免誤觸 (確認後才回到最後檢查點)</summary>
+    private void RequestRespawn()
+    {
+        if (RespawnConfirmDialog.IsOpen) return;
+        DroneFlightHUD hud = FindFirstObjectByType<DroneFlightHUD>();
+        Canvas canvas = hud != null ? hud.GetComponentInParent<Canvas>() : null;
+        RespawnConfirmDialog.Open(canvas, this, Respawn);
     }
 
     private void Respawn()

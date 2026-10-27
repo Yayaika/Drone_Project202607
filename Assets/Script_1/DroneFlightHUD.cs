@@ -770,7 +770,12 @@ public class DroneFlightHUD : MonoBehaviour
         // 模擬 4S 鋰電：滿電 16.8V，空電 14.0V，大油門時電壓下降
         float voltage = Mathf.Lerp(14.0f, 16.8f, battery / 100f) - throttle * 0.6f;
         Color batteryColor = battery < 15f ? warningColor : battery < 30f ? cautionColor : horizonColor;
-        SetText(batteryText, $"BAT {battery:0}%  {voltage:0.0}V");
+        // 碰撞扣電時短暫顯示扣除量
+        float crashDrain = crashFlashTimer > 0f ? droneController.LastCrashBatteryDrain : 0f;
+        if (crashDrain > 0f) batteryColor = warningColor;
+        SetText(batteryText, crashDrain > 0f
+            ? $"BAT {battery:0}%  -{crashDrain:0.#}%"
+            : $"BAT {battery:0}%  {voltage:0.0}V");
         batteryText.color = batteryColor;
         batteryFill.rectTransform.sizeDelta = new Vector2(70f * battery / 100f, 3f);
         batteryFill.color = batteryColor;

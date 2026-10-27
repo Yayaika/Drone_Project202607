@@ -63,6 +63,12 @@
 
 ## 4. 最近完成的工作
 
+- 2026-10-27：開始選單設置面板美化：深色圓角卡片＋青綠外框、標題／副標題／分隔線、音量列（標籤｜滑桿｜百分比）不再被按鈕蓋住、「操作說明」「製作名單」同尺寸對稱、「返回」置中加大，隱藏「+」裝飾圖示（`PanelEnhancer.EnhanceMainMenuSettings`，執行時套用，場景檔不變）。Play Mode 截圖確認版面，製作名單按鈕可開啟名單面板
+- 2026-10-27：R／手把 B「回到最後檢查點」改為先彈出確認視窗（「確定要重來嗎？」＋確認重來／退出按鈕，預選「退出」，B 鍵＝退出；開啟時暫停並停用操控）（`UI/RespawnConfirmDialog.cs`、`DroneController1.RequestRespawn`）；升降靈敏度第二輪提高（D-032）。dotnet 編譯 0 錯誤，**未在 Play Mode 實測**
+- 2026-10-27：碰撞扣電：撞擊速度 > 1.5 m/s 時依速度扣 1~5% 電量（每 1 m/s 扣 0.4%），連續擦撞 0.5 秒內只扣一次，地面/屋頂著陸低於 5 m/s 不扣；HUD 電池欄位短暫以紅字顯示「-X%」（`DroneController1.ApplyCrashBatteryDrain`、`DroneFlightHUD`）。dotnet 編譯 0 錯誤，**未實際飛行測試**
+- 2026-10-27：飛控手感：偏航最大角速度 300 → 180 °/s、角加速度約降 40%；最大爬升／下降速度與垂直加速度約提高 35~40%（兩台無人機 Prefab，D-032）。**未實際試飛**
+- 2026-10-27：模式選擇三張卡片對齊同一高度與大小：`UIButtonTweenFx` 只中斷自己的縮放動畫（原本 `transform.DOKill()` 會打斷 `UITween.StaggerIn` 的進場位移，使選中／滑入／切換頁面的卡片停在錯位高度且越切越偏），模式卡片選中時不放大（`SetScaleFeedback`）。dotnet 編譯 0 錯誤，**未在 Play Mode 截圖確認**
+- 2026-10-27：選擇無人機場景加入「返回主選單」按鈕（左上角，執行時建立；Esc／手把 B 也可返回 StartMenu，模式選擇面板開著時 B 只關閉面板），手把可由左切換鈕／開始任務往上選到（`UIPlayerSelectCtrl.BackToStartMenu`）。dotnet 編譯 0 錯誤，**未在 Unity Play Mode 實測版面與按鍵**
 - 2026-10-27：HUD「校準視角」「設置」按鈕縮小為 120×28，並同時標示鍵盤與手把按鍵（V／R3、Esc／Menu）
 - 2026-10-27：選擇無人機場景手把操作：預選「開始任務」、左右切換鈕與開始任務明確導航、LB／RB 切換無人機（`UIPlayerSelectCtrl.SetupGamepadNavigation`）；選取不會跑到 XR 模擬器除錯 UI；互動高亮統一為藍色（外框＋滑入/選中底色）
 - 2026-10-27：純手把操作：XR UI Input Module 執行時改用 Input System（左搖桿/十字鍵移動、A 確認、B 取消），沒有選取時推搖桿自動選取按鈕、選單面板按 B 關閉（`UI/GamepadUINavigator.cs`）；選中按鈕加金色脈動外框＋放大＋音效（`UIButtonTweenFx`）；開始選單手把 X 鍵開始遊戲並預選開始按鈕。**模擬按鍵在 Editor 無法送達 Input System，實體 Xbox 手把未實測**

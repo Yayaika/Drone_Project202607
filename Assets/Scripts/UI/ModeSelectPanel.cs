@@ -133,6 +133,8 @@ public class ModeSelectPanel : MonoBehaviour
     private void CreateModeCard(RectTransform parent, GameModeType mode, Vector2 position, string title, string description, Color accent)
     {
         Button card = RuntimeUI.CreateButton($"Card_{mode}", parent, string.Empty, position, new Vector2(CardWidth, 210f), () => ShowLevels(mode), 18f);
+        // 三張卡片並排：選中 / 滑入只顯示外框與底色，不放大，保持同樣高度與大小
+        card.GetComponent<UIButtonTweenFx>().SetScaleFeedback(1f, 0.97f);
         Outline outline = card.gameObject.AddComponent<Outline>();
         outline.effectColor = accent;
         outline.effectDistance = new Vector2(2f, -2f);

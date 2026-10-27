@@ -331,6 +331,18 @@
   - 由選單「無人機遊戲/13. 建立開場動畫 (開始選單)」(`Editor/IntroCutsceneBuilder.cs`) 建立；重新執行會覆蓋 Timeline 資產。
 - **相關檔案：** `Scripts/Cutscene/IntroCutscene.cs`、`Scripts/Cutscene/DialogueClip.cs`、`Scripts/Cutscene/DialogueTrack.cs`、`Scripts/Editor/IntroCutsceneBuilder.cs`、`Scripts/Audio/GameAudio.cs`、`Scripts/Audio/SynthSfx.cs`、`Scenes/StartMenu.unity`、`Cutscenes/`
 
+## D-032：降低偏航靈敏度、提高升降靈敏度
+
+- **日期：** 2026-10-27
+- **狀態：** 已確認（使用者要求：左右旋轉靈敏度降低、上下靈敏度提高）
+- **決定：** 只調整兩台無人機 Prefab 上 `DroneController1` 的序列化數值（腳本預設值不變）：
+  - 偏航：`maxYawRate` 300 → 180 °/s；`yawAcceleration` 1500 → 900（Drone_Parent Variant）、2000 → 1100（Drone_Bomb）
+  - 升降：`maxClimbRate` 5 → 7、7 → 9 m/s；`maxDescentRate` 3 → 4.5、4 → 5.5 m/s；`maxVerticalAcceleration` 10 → 14、13 → 17 m/s²；`altitudeHoldStrength` 8 → 10（兩台）
+  - 2026-10-27 第二輪（使用者要求升降再提高）：`maxClimbRate` 7 → 9、9 → 11 m/s；`maxDescentRate` 4.5 → 6、5.5 → 7 m/s；`maxVerticalAcceleration` 14 → 18、17 → 21 m/s²；`altitudeHoldStrength` 10 → 12；碰撞扣電的著陸豁免速度 `hardLandingSpeed` 5 → 8 m/s（避免全速下降著陸被判為碰撞）
+- **原因：** 偏航過快不易對準檢查圈；升降偏慢。兩台維持原本的相對差異（炸彈無人機較靈活）。
+- **替代方案：** 新增偏航專用 Expo 曲線（未採用，先以數值調整）。
+- **相關檔案：** `Prefabs/Drone_Parent Variant.prefab`、`Prefabs/Drone_Bomb.prefab`
+
 ## 後續決策
 
 新增決策時複製以下格式：

@@ -26,6 +26,9 @@ public class UIPlayerSelectCtrl : MonoBehaviour
     [Tooltip("可以調整 X 軸使無人機向前傾斜 (例如 15~25)，Y 軸設定為 180 讓無人機轉過來面對玩家")]
     [SerializeField] private Vector3 _previewRotationOffset = new Vector3(15f, 180f, 0f);
 
+    [Header("返回開始選單")]
+    [SerializeField] private string _startMenuScene = "StartMenu";
+
     [Serializable]
     public struct CharOption
     {
@@ -42,6 +45,7 @@ public class UIPlayerSelectCtrl : MonoBehaviour
 
     private InputAction previousDroneAction;
     private InputAction nextDroneAction;
+    private InputAction backToMenuAction;
 
     private void Start()
     {
@@ -55,7 +59,13 @@ public class UIPlayerSelectCtrl : MonoBehaviour
     private void Update()
     {
         // 手把 LB / RB 直接切換無人機 (模式選擇面板開著時不切換)
-        if (ModeSelectPanel.IsOpen) return;
+        if (ModeSelectPanel.IsOpen || UIModalNavigation.Top != null) return;
+        if (backToMenuAction != null && backToMenuAction.WasPressedThisFrame())
+        {
+            GameAudio.Play(GameSfx.UIClick);
+            BackToStartMenu();
+            return;
+        }
         if (previousDroneAction != null && previousDroneAction.WasPressedThisFrame()) PreDrone();
         if (nextDroneAction != null && nextDroneAction.WasPressedThisFrame()) NextDrone();
     }
@@ -64,11 +74,12 @@ public class UIPlayerSelectCtrl : MonoBehaviour
     {
         previousDroneAction?.Dispose();
         nextDroneAction?.Dispose();
+        backToMenuAction?.Dispose();
     }
 
     /// <summary>
     /// 手把操作：左 / 右切換鈕與「進入」按鈕明確互相導航 (自動導航會跑到 XR 模擬器的除錯 UI)，
-    /// 預選「進入」讓 A 鍵可直接確認；LB / RB 切換無人機。
+    /// 預選「進入」讓 A 鍵可直接確認；LB / RB 切換無人機；Esc / B 返回開始選單。
     /// </summary>
     private void SetupGamepadNavigation()
     {
@@ -77,18 +88,39 @@ public class UIPlayerSelectCtrl : MonoBehaviour
         previousDroneAction.Enable();
         nextDroneAction.Enable();
 
+        backToMenuAction = new InputAction("BackToStartMenu", InputActionType.Button);
+        backToMenuAction.AddBinding("<Keyboard>/escape");
+        backToMenuAction.AddBinding("<Gamepad>/buttonEast");
+        backToMenuAction.Enable();
+
         Button left = FindButtonCalling(nameof(PreDrone));
         Button right = FindButtonCalling(nameof(NextDrone));
         Button enter = FindButtonCalling(nameof(EnterStage));
+        Button back = FindButtonCalling(nameof(BackToStartMenu)) ?? CreateBackButton();
 
-        SetNavigation(left, enter, null, null, right);
+        SetNavigation(left, back, null, null, right);
         SetNavigation(right, enter, null, left, enter);
-        SetNavigation(enter, null, right, right, null);
+        SetNavigation(enter, back, right, right, null);
+        SetNavigation(back, null, left, null, enter);
 
         if (enter != null && EventSystem.current != null)
         {
             EventSystem.current.SetSelectedGameObject(enter.gameObject);
         }
+    }
+
+    /// <summary>場景未手動放置返回按鈕時，在 Canvas 左上角建立「返回主選單」按鈕</summary>
+    private Button CreateBackButton()
+    {
+        Canvas canvas = _textName != null ? _textName.canvas : FindFirstObjectByType<Canvas>();
+        if (canvas == null) return null;
+
+        Button button = RuntimeUI.CreateButton("[BTN]BackToStartMenu", canvas.rootCanvas.transform, "返回主選單  (Esc / B)",
+            Vector2.zero, new Vector2(320f, 72f), BackToStartMenu, 28f, _textName != null ? _textName.font : null);
+        RectTransform rect = (RectTransform)button.transform;
+        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, 1f);
+        rect.anchoredPosition = new Vector2(40f, -40f);
+        return button;
     }
 
     /// <summary>OnClick 設定為呼叫本元件指定方法的按鈕</summary>
@@ -206,6 +238,12 @@ public class UIPlayerSelectCtrl : MonoBehaviour
         // 進入關卡前先選擇遊戲模式 (競速 / 搬運 / 打擊) 與關卡
         Canvas canvas = _textName != null ? _textName.canvas : FindFirstObjectByType<Canvas>();
         ModeSelectPanel.Open(canvas, _textName != null ? _textName.font : null);
+    }
+
+    public void BackToStartMenu()
+    {
+        if (SceneLoader.IsLoading || ModeSelectPanel.IsOpen) return;
+        SceneLoader.Load(_startMenuScene);
     }
 
     public void NextDrone()
