@@ -1,5 +1,6 @@
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.Playables;
 using UnityEngine.UI;
@@ -10,6 +11,7 @@ using UnityEngine.UI;
 /// - 右上角「跳過」按鈕可用滑鼠或 VR 手把射線點擊；鍵盤 Space / Enter / Esc、手把 B / Start、VR 手把 B / Y 也可跳過
 /// - 字幕介面為跟隨頭部的世界空間 Canvas (手把射線才點得到)，每句對話彈出時播放音效
 /// - 播完或跳過後載入下一個場景 (選擇無人機)
+/// - 開始選單：手把 X 鍵 (Xbox X / PS □) 直接開始，並預設選取開始按鈕讓手把可以操作 UI
 /// 由選單「無人機遊戲/13. 建立開場動畫」設定，開始按鈕改呼叫 <see cref="Play"/>。
 /// </summary>
 public class IntroCutscene : MonoBehaviour
@@ -28,6 +30,9 @@ public class IntroCutscene : MonoBehaviour
     [SerializeField] private float charactersPerSecond = 18f;
     [Tooltip("字幕介面在相機前方的距離 (m)")]
     [SerializeField] private float uiDistance = 1.2f;
+    [Tooltip("字幕介面佔視野的比例 (VR 頭顯邊緣看不清楚，預設留 25% 邊界)")]
+    [Range(0.4f, 1f)]
+    [SerializeField] private float uiViewportFill = 0.75f;
     [Tooltip("每句對話彈出時的音效；留空則使用 GameAudio 的 DialoguePop")]
     [SerializeField] private AudioClip dialoguePopSound;
     [SerializeField] private string locationCaption = "新港市　上午 7:42";
@@ -45,6 +50,8 @@ public class IntroCutscene : MonoBehaviour
     private TextMeshProUGUI speakerText;
     private TextMeshProUGUI lineText;
     private InputAction skipAction;
+    private InputAction startAction;
+    private UIPanelCtrl[] menuPanels;
     private bool playing;
     private bool finished;
     private bool lineVisible;
@@ -53,6 +60,55 @@ public class IntroCutscene : MonoBehaviour
     private float popTime = -1f;
 
     public bool IsPlaying => playing;
+
+    private void Start()
+    {
+        // 開始選單沒有預設選取的按鈕時手把無法操作 UI：提供 X 鍵直接開始，並預選開始按鈕
+        startAction = new InputAction("StartGame", InputActionType.Button, "<Gamepad>/buttonWest");
+        startAction.Enable();
+        menuPanels = FindObjectsByType<UIPanelCtrl>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+
+        Button startButton = FindStartButton();
+        if (startButton == null) return;
+
+        TextMeshProUGUI icon = RuntimeUI.CreateText("GamepadHint", startButton.transform, "<sprite name=\"xx\">", 44f,
+            new Vector2(-135f, 0f), new Vector2(60f, 60f));
+        icon.spriteAsset = ControlsHelp.ResolveSpriteAsset();
+        icon.raycastTarget = false;
+
+        EventSystem eventSystem = EventSystem.current;
+        if (eventSystem != null && eventSystem.currentSelectedGameObject == null)
+        {
+            eventSystem.SetSelectedGameObject(startButton.gameObject);
+        }
+    }
+
+    /// <summary>開始按鈕：OnClick 設定為呼叫本元件 Play 的按鈕</summary>
+    private Button FindStartButton()
+    {
+        foreach (Button button in FindObjectsByType<Button>(FindObjectsSortMode.None))
+        {
+            for (int i = 0; i < button.onClick.GetPersistentEventCount(); i++)
+            {
+                if (button.onClick.GetPersistentTarget(i) == this && button.onClick.GetPersistentMethodName(i) == nameof(Play)) return button;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>設置 / 退出 / 製作名單等面板開著時，X 鍵不開始遊戲</summary>
+    private bool IsMenuPanelOpen()
+    {
+        foreach (UIPanelCtrl panel in menuPanels)
+        {
+            if (panel != null && panel.IsOpen) return true;
+        }
+        foreach (UIPopupPanel popup in FindObjectsByType<UIPopupPanel>(FindObjectsSortMode.None))
+        {
+            if (popup.IsOpen) return true;
+        }
+        return false;
+    }
 
     /// <summary>開始按鈕呼叫：播放開場動畫 (沒有 Timeline 或設定為只播一次且已看過時直接進入下一個場景)</summary>
     public void Play()
@@ -116,7 +172,11 @@ public class IntroCutscene : MonoBehaviour
 
     private void Update()
     {
-        if (!playing) return;
+        if (!playing)
+        {
+            if (!finished && startAction != null && startAction.WasPressedThisFrame() && !IsMenuPanelOpen()) Play();
+            return;
+        }
         AttachToCamera();
 
         float elapsed = Time.unscaledTime - startTime;
@@ -135,6 +195,7 @@ public class IntroCutscene : MonoBehaviour
 
     private void OnDestroy()
     {
+        startAction?.Dispose();
         skipAction?.Dispose();
         if (director != null) director.stopped -= OnDirectorStopped;
     }
@@ -281,7 +342,8 @@ public class IntroCutscene : MonoBehaviour
     }
 
     /// <summary>
-    /// 字幕介面掛在 Main Camera 前方 uiDistance 處並填滿視野 (世界空間 Canvas：滑鼠與 VR 手把射線都能點擊)。
+    /// 字幕介面掛在 Main Camera 前方 uiDistance 處，依視野寬高等比縮放到 uiViewportFill 的大小
+    /// (世界空間 Canvas：滑鼠與 VR 手把射線都能點擊)。VR 單眼畫面比 16:9 窄，只依高度縮放會左右超出視角。
     /// 相機尚未出現或更換時重新掛上。
     /// </summary>
     private void AttachToCamera()
@@ -295,7 +357,9 @@ public class IntroCutscene : MonoBehaviour
         host.localPosition = new Vector3(0f, 0f, uiDistance);
         host.localRotation = Quaternion.identity;
         float visibleHeight = 2f * uiDistance * Mathf.Tan(main.fieldOfView * 0.5f * Mathf.Deg2Rad);
-        host.localScale = Vector3.one * (visibleHeight / 1080f);
+        float visibleWidth = visibleHeight * main.aspect;
+        float fit = Mathf.Min(visibleHeight / 1080f, visibleWidth / 1920f);
+        host.localScale = Vector3.one * (fit * uiViewportFill);
         canvas.worldCamera = main;
     }
 

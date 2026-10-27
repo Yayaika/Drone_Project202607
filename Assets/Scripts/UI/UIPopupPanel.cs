@@ -24,6 +24,7 @@ public class UIPopupPanel : MonoBehaviour
     private RectTransform animatedTarget;
     private Vector3 baseScale = Vector3.one;
     private bool hiding;
+    private UIModalNavigation modal;
 
     public bool IsOpen => gameObject.activeSelf && !hiding;
 
@@ -60,6 +61,11 @@ public class UIPopupPanel : MonoBehaviour
         group.DOFade(1f, showDuration * 0.7f).SetUpdate(true);
         animatedTarget.DOScale(baseScale, showDuration).SetEase(Ease.OutBack).SetUpdate(true);
         if (playSound) GameAudio.Play(GameSfx.PanelOpen, 0.7f);
+
+        // 手把 / VR 搖桿只能在面板內移動選取
+        // 選單中手把 B 鍵關閉面板；飛行中 B 鍵是「回到檢查點」，不改接
+        if (modal == null) modal = new UIModalNavigation(transform, FindFirstObjectByType<DroneController1>() == null ? Hide : null);
+        modal.Begin();
     }
 
     private void OnDisable()
@@ -72,6 +78,7 @@ public class UIPopupPanel : MonoBehaviour
         }
         if (group != null) group.alpha = 1f;
         hiding = false;
+        modal?.End();
     }
 
     public void Show()
@@ -86,6 +93,7 @@ public class UIPopupPanel : MonoBehaviour
         hiding = true;
         group.blocksRaycasts = false;
         group.interactable = false;
+        modal?.End();
 
         group.DOKill();
         animatedTarget.DOKill();

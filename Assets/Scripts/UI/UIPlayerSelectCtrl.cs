@@ -2,6 +2,8 @@
 using TMPro;
 using Unity.Cinemachine;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 public class UIPlayerSelectCtrl : MonoBehaviour
@@ -38,12 +40,81 @@ public class UIPlayerSelectCtrl : MonoBehaviour
 
     public CharOption[] charOptions;
 
+    private InputAction previousDroneAction;
+    private InputAction nextDroneAction;
+
     private void Start()
     {
         // 初始時先關閉所有無人機腳本
         DisableAllDroneScripts();
         UpdateInfo();
         GameAudio.PlayMusic(GameMusic.Menu);
+        SetupGamepadNavigation();
+    }
+
+    private void Update()
+    {
+        // 手把 LB / RB 直接切換無人機 (模式選擇面板開著時不切換)
+        if (ModeSelectPanel.IsOpen) return;
+        if (previousDroneAction != null && previousDroneAction.WasPressedThisFrame()) PreDrone();
+        if (nextDroneAction != null && nextDroneAction.WasPressedThisFrame()) NextDrone();
+    }
+
+    private void OnDestroy()
+    {
+        previousDroneAction?.Dispose();
+        nextDroneAction?.Dispose();
+    }
+
+    /// <summary>
+    /// 手把操作：左 / 右切換鈕與「進入」按鈕明確互相導航 (自動導航會跑到 XR 模擬器的除錯 UI)，
+    /// 預選「進入」讓 A 鍵可直接確認；LB / RB 切換無人機。
+    /// </summary>
+    private void SetupGamepadNavigation()
+    {
+        previousDroneAction = new InputAction("PreviousDrone", InputActionType.Button, "<Gamepad>/leftShoulder");
+        nextDroneAction = new InputAction("NextDrone", InputActionType.Button, "<Gamepad>/rightShoulder");
+        previousDroneAction.Enable();
+        nextDroneAction.Enable();
+
+        Button left = FindButtonCalling(nameof(PreDrone));
+        Button right = FindButtonCalling(nameof(NextDrone));
+        Button enter = FindButtonCalling(nameof(EnterStage));
+
+        SetNavigation(left, enter, null, null, right);
+        SetNavigation(right, enter, null, left, enter);
+        SetNavigation(enter, null, right, right, null);
+
+        if (enter != null && EventSystem.current != null)
+        {
+            EventSystem.current.SetSelectedGameObject(enter.gameObject);
+        }
+    }
+
+    /// <summary>OnClick 設定為呼叫本元件指定方法的按鈕</summary>
+    private Button FindButtonCalling(string methodName)
+    {
+        foreach (Button button in FindObjectsByType<Button>(FindObjectsSortMode.None))
+        {
+            for (int i = 0; i < button.onClick.GetPersistentEventCount(); i++)
+            {
+                if (button.onClick.GetPersistentTarget(i) == this && button.onClick.GetPersistentMethodName(i) == methodName) return button;
+            }
+        }
+        return null;
+    }
+
+    private static void SetNavigation(Selectable selectable, Selectable up, Selectable down, Selectable left, Selectable right)
+    {
+        if (selectable == null) return;
+        selectable.navigation = new Navigation
+        {
+            mode = Navigation.Mode.Explicit,
+            selectOnUp = up,
+            selectOnDown = down,
+            selectOnLeft = left,
+            selectOnRight = right
+        };
     }
 
     /// <summary>

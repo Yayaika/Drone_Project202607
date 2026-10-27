@@ -103,14 +103,23 @@ public class DroneFlightHUD : MonoBehaviour
         toggleSettingsAction.AddBinding("<Gamepad>/start");
         // VR 手把：左手 Menu 鍵
         toggleSettingsAction.AddBinding("<XRController>{LeftHand}/{MenuButton}");
+
+        // 校準視角 (第三人稱)：V / 手把右搖桿按下 / VR 右手搖桿按下
+        recenterAction = new InputAction("RecenterView", binding: "<Keyboard>/v");
+        recenterAction.AddBinding("<Gamepad>/rightStickPress");
+        recenterAction.AddBinding("<XRController>{RightHand}/{Primary2DAxisClick}");
     }
 
     private InputAction toggleSettingsAction;
+    private InputAction recenterAction;
+    private GameObject recenterButton;
+    private Button settingsRecenterButton;
 
     private void OnEnable()
     {
         toggleOsdAction?.Enable();
         toggleSettingsAction?.Enable();
+        recenterAction?.Enable();
         if (droneController != null) droneController.OnCrash += HandleCrash;
         HandlesEscape = true;
     }
@@ -119,6 +128,7 @@ public class DroneFlightHUD : MonoBehaviour
     {
         toggleOsdAction?.Disable();
         toggleSettingsAction?.Disable();
+        recenterAction?.Disable();
         if (droneController != null) droneController.OnCrash -= HandleCrash;
         HandlesEscape = false;
         if (pausedBySettings)
@@ -167,6 +177,10 @@ public class DroneFlightHUD : MonoBehaviour
 
         bool isFirstPerson = droneController.IsFirstPerson;
         firstPersonRoot.SetActive(isFirstPerson);
+
+        // 校準視角只在第三人稱提供
+        if (recenterButton != null && recenterButton.activeSelf == isFirstPerson) recenterButton.SetActive(!isFirstPerson);
+        if (recenterAction != null && recenterAction.WasPressedThisFrame() && !isFirstPerson) RecenterView();
 
         // 以第一人稱鏡頭錨點計算姿態，確保與玩家看到的畫面一致 (不受模型朝向影響)
         Transform view = droneController.FirstPersonAnchor;
@@ -465,20 +479,20 @@ public class DroneFlightHUD : MonoBehaviour
         }
         if (settingsButton != null)
         {
-            // 放在畫面右上方 (檢查點進度上面)，避開中央的航向帶與導航提示；加大並標示 ESC 快捷鍵
+            // 放在畫面右上方 (檢查點進度上面)，避開中央的航向帶與導航提示；標示 ESC / 手把 Menu 鍵
             RectTransform rect = (RectTransform)settingsButton;
             rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
             rect.pivot = new Vector2(0.5f, 0.5f);
             rect.anchoredPosition = new Vector2(osdScale * settingsButtonOffsetX, osdScale * settingsButtonHeight);
-            rect.sizeDelta = new Vector2(150f, 34f);
+            rect.sizeDelta = HudButtonSize;
             Button button = settingsButton.GetComponent<Button>();
-            ControlsHelp.StyleButton(button, "<sprite name=\"esc\"> 設置");
+            ControlsHelp.StyleButton(button, "<sprite name=\"esc\"><sprite name=\"xmenu\"> 設置");
             Image image = button.targetGraphic as Image;
             if (image != null) image.color = new Color(0.05f, 0.35f, 0.32f, 0.92f);
             TextMeshProUGUI label = settingsButton.GetComponentInChildren<TextMeshProUGUI>(true);
             if (label != null)
             {
-                label.fontSize = 20f;
+                label.fontSize = HudButtonFontSize;
                 label.alignment = TextAlignmentOptions.Center;
                 label.textWrappingMode = TextWrappingModes.NoWrap;
             }
@@ -486,11 +500,89 @@ public class DroneFlightHUD : MonoBehaviour
             // 巢狀 Canvas 的 UI 只會被「自己」的 Raycaster 判定，按鈕要能點必須補上
             EnsureRaycasters(settingsButton.gameObject);
         }
+        CreateRecenterButton();
         // 滑鼠點擊設置面板/按鈕需要 GraphicRaycaster (Prefab 上預設停用，只留 VR 射線用的 Raycaster)
         EnsureRaycasters(gameObject);
 
         settingsPanel = FindDeepChild(transform, "[Panel]設置")?.gameObject;
     }
+
+    #region 校準視角 (第三人稱)
+
+    // HUD 上方「校準視角」與「設置」按鈕的大小
+    private static readonly Vector2 HudButtonSize = new Vector2(120f, 28f);
+    private const float HudButtonFontSize = 14f;
+
+    /// <summary>醒目的常駐按鈕，放在設置按鈕的左右對稱位置；第一人稱時隱藏</summary>
+    private void CreateRecenterButton()
+    {
+        if (recenterButton != null) return;
+
+        Button button = RuntimeUI.CreateButton("[Button]校準視角", transform, string.Empty,
+            new Vector2(-osdScale * settingsButtonOffsetX, osdScale * settingsButtonHeight), HudButtonSize, RecenterFromButton, HudButtonFontSize);
+        // 鍵盤 V / 手把右搖桿按下 (R3)
+        ControlsHelp.StyleButton(button, "<sprite name=\"v\"><sprite name=\"jrclick\"> 校準視角");
+        Image image = button.targetGraphic as Image;
+        if (image != null) image.color = new Color(1f, 0.55f, 0.1f, 0.95f);
+        Outline outline = button.gameObject.AddComponent<Outline>();
+        outline.effectColor = new Color(1f, 0.95f, 0.6f, 0.9f);
+        outline.effectDistance = new Vector2(2f, -2f);
+
+        TextMeshProUGUI label = button.GetComponentInChildren<TextMeshProUGUI>(true);
+        if (label != null)
+        {
+            label.fontSize = HudButtonFontSize;
+            label.fontStyle = FontStyles.Bold;
+            label.alignment = TextAlignmentOptions.Center;
+            label.textWrappingMode = TextWrappingModes.NoWrap;
+        }
+
+        recenterButton = button.gameObject;
+        AddNestedCanvas(recenterButton);
+        // 巢狀 Canvas 的 UI 只會被「自己」的 Raycaster 判定，按鈕要能點必須補上
+        EnsureRaycasters(recenterButton);
+        recenterButton.SetActive(droneController == null || !droneController.IsFirstPerson);
+    }
+
+    /// <summary>讓玩家目前的頭部朝向對準無人機 (V 鍵、手把 / VR 右搖桿按下)</summary>
+    public void RecenterView()
+    {
+        if (droneController == null || !droneController.RecenterView()) return;
+        GameAudio.Play(GameSfx.UIClick);
+    }
+
+    /// <summary>
+    /// 設置面板內也放一顆「校準視角」，與「操作說明」並排；第一人稱時停用。
+    /// 在面板開啟時才建立 (PanelEnhancer 排版完成之後)，避免位置被覆蓋。
+    /// </summary>
+    private void SyncSettingsRecenterButton()
+    {
+        if (settingsPanel == null) return;
+
+        if (settingsRecenterButton == null)
+        {
+            settingsRecenterButton = RuntimeUI.CreateButton("[Button]校準視角", settingsPanel.transform, string.Empty,
+                new Vector2(92f, -52f), new Vector2(170f, 34f), RecenterFromButton, 18f);
+            ControlsHelp.StyleButton(settingsRecenterButton, "<sprite name=\"v\"><sprite name=\"jrclick\"> 校準視角");
+
+            foreach (Button button in settingsPanel.GetComponentsInChildren<Button>(true))
+            {
+                if (button.name != "[Button]鍵盤操控") continue;
+                ((RectTransform)button.transform).anchoredPosition = new Vector2(-92f, -52f);
+                break;
+            }
+        }
+
+        settingsRecenterButton.interactable = droneController != null && droneController.CanRecenterView;
+    }
+
+    /// <summary>按鈕點擊音效已由 UIButtonTweenFx 播放</summary>
+    private void RecenterFromButton()
+    {
+        if (droneController != null) droneController.RecenterView();
+    }
+
+    #endregion
 
     #region 設置面板 (ESC)
 
@@ -531,6 +623,7 @@ public class DroneFlightHUD : MonoBehaviour
         if (open == pausedBySettings) return;
         pausedBySettings = open;
         Time.timeScale = open ? 0f : 1f;
+        if (open) SyncSettingsRecenterButton();
         SyncSettingsSelection(open);
     }
 

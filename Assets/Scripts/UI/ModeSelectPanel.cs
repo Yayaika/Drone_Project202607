@@ -24,8 +24,12 @@ public class ModeSelectPanel : MonoBehaviour
     private GameModeType pendingMode;
     private InputAction backAction;
     private System.Action onClosed;
+    private UIModalNavigation modal;
 
     private static ModeSelectPanel current;
+
+    public static bool IsOpen => current != null;
+    private bool closing;
 
     /// <summary>開啟面板。parentCanvas 為 null 時建立螢幕覆蓋 Canvas。</summary>
     public static ModeSelectPanel Open(Canvas parentCanvas, TMP_FontAsset font = null, System.Action closed = null)
@@ -74,6 +78,9 @@ public class ModeSelectPanel : MonoBehaviour
     private void Build(RectTransform overlay, float scale)
     {
         group = overlay.gameObject.AddComponent<CanvasGroup>();
+        // 先記住開啟前的選取 (選擇無人機的「進入」按鈕)，並鎖住面板外的手把 / VR 搖桿導航
+        modal = new UIModalNavigation(overlay);
+        modal.Begin(false);
 
         RectTransform frame = RuntimeUI.CreateCentered("Frame", overlay, Vector2.zero, new Vector2(DesignWidth, DesignHeight));
         frame.localScale = Vector3.one * scale;
@@ -98,6 +105,8 @@ public class ModeSelectPanel : MonoBehaviour
         backAction.AddBinding("<Keyboard>/escape");
         backAction.AddBinding("<Keyboard>/backspace");
         backAction.AddBinding("<Gamepad>/buttonEast");
+        backAction.AddBinding("<XRController>{RightHand}/secondaryButton");
+        backAction.AddBinding("<XRController>{LeftHand}/secondaryButton");
         backAction.Enable();
     }
 
@@ -259,7 +268,11 @@ public class ModeSelectPanel : MonoBehaviour
 
     public void Close()
     {
+        if (closing) return;
+        closing = true;
         backAction?.Disable();
+        // 面板與目前選取的卡片會被銷毀，選取必須還給開啟前的按鈕，否則手把 / 搖桿會完全失效
+        modal?.End();
         UITween.HidePanel(group).OnComplete(() =>
         {
             if (this != null) Destroy(gameObject);
@@ -269,6 +282,7 @@ public class ModeSelectPanel : MonoBehaviour
 
     private void OnDestroy()
     {
+        modal?.End();
         backAction?.Dispose();
         if (current == this) current = null;
     }

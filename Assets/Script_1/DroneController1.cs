@@ -1040,6 +1040,40 @@ public class DroneController1 : MonoBehaviour
         Debug.Log($"[DroneController] 已成功切換至視角 {currentCameraIndex + 1}");
     }
 
+    /// <summary>第三人稱才需要校準視角 (第一人稱鏡頭固定朝機頭)</summary>
+    public bool CanRecenterView => !IsFirstPerson && xrOriginTransform != null && xrOriginTransform.parent != null;
+
+    /// <summary>
+    /// 第三人稱校準視角：VR 頭顯的實際朝向/位置可能偏離 (玩家轉身或走動)，
+    /// 旋轉並平移 XR Origin，讓目前的頭部朝向水平對準無人機、頭部回到鏡頭錨點。
+    /// 只修正水平方向，不改變上下俯仰與高度 (避免暈眩)。修正以鏡頭支架為基準，之後會跟著無人機航向一起轉。
+    /// </summary>
+    public bool RecenterView()
+    {
+        if (!CanRecenterView) return false;
+
+        Camera trackedCamera = xrOriginTransform.GetComponentInChildren<Camera>(true);
+        if (trackedCamera == null) return false;
+
+        Transform anchor = xrOriginTransform.parent;
+
+        // 在鏡頭支架的座標系中計算：目前頭部水平朝向 vs. 從錨點 (校準後的頭部位置) 看向無人機的水平朝向
+        Vector3 headForward = anchor.InverseTransformDirection(trackedCamera.transform.forward);
+        Vector3 toDrone = anchor.InverseTransformDirection(transform.position - anchor.position);
+        headForward.y = 0f;
+        toDrone.y = 0f;
+        if (headForward.sqrMagnitude > 0.0001f && toDrone.sqrMagnitude > 0.0001f)
+        {
+            float correction = Vector3.SignedAngle(headForward, toDrone, Vector3.up);
+            xrOriginTransform.localRotation = Quaternion.Euler(0f, correction, 0f) * xrOriginTransform.localRotation;
+        }
+
+        // 頭部水平位置回到錨點 (保留原本的高度設定)
+        Vector3 headOffset = anchor.InverseTransformPoint(trackedCamera.transform.position);
+        xrOriginTransform.localPosition -= new Vector3(headOffset.x, 0f, headOffset.z);
+        return true;
+    }
+
     private void Respawn()
     {
         // 🌟 方式 A：最乾淨、最徹底的重置方法 —— 直接重新載入當前場景

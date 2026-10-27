@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -9,6 +10,7 @@ using UnityEngine.UI;
 /// - 「操作介紹面板」：重建為含按鍵圖示的鍵盤/手把操作說明
 /// - 關卡「介紹面板」：依目前模式 (競速/搬運) 顯示正確的過關目標
 /// - 主選單「SettingPanel」：加入音量滑桿與操作說明按鈕
+/// - 主選單「ListPanel」(製作名單)：依場景中的名單文字重新排版為 職稱｜姓名｜學號 三欄
 /// </summary>
 public static class PanelEnhancer
 {
@@ -16,6 +18,7 @@ public static class PanelEnhancer
     private const string ControlsPanelName = "操作介紹面板";
     private const string IntroPanelName = "介紹面板";
     private const string MainMenuSettingsName = "SettingPanel";
+    private const string CreditsPanelName = "ListPanel";
     private const string VolumePrefsKey = "MasterVolume";
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -40,7 +43,8 @@ public static class PanelEnhancer
         {
             if (rect == null || rect.GetComponent<PanelEnhancedMarker>() != null) continue;
 
-            switch (rect.name)
+            // 場景中的製作名單物件名稱結尾帶空白 ("ListPanel ")
+            switch (rect.name.Trim())
             {
                 case DroneSettingsPanelName:
                     EnhanceDroneSettings(rect, isGameplay);
@@ -55,6 +59,9 @@ public static class PanelEnhancer
                     break;
                 case MainMenuSettingsName:
                     if (rect.GetComponent<UIPanelCtrl>() != null) EnhanceMainMenuSettings(rect);
+                    break;
+                case CreditsPanelName:
+                    if (rect.GetComponent<UIPanelCtrl>() != null) EnhanceCredits(rect);
                     break;
             }
         }
@@ -127,9 +134,13 @@ public static class PanelEnhancer
         }
 
         TextMeshProUGUI hint = RuntimeUI.CreateText("SettingsHint", panel,
-            "<sprite name=\"h\"> 切換 HUD　<sprite name=\"r\"> 回到檢查點　<sprite name=\"z\"> 抓取 / 放下", 15f,
-            new Vector2(0f, -138f), new Vector2(390f, 22f));
+            "<sprite name=\"v\"> 校準視角　<sprite name=\"h\"> 切換 HUD　<sprite name=\"r\"> 回到檢查點　<sprite name=\"z\"> 抓取 / 放下", 15f,
+            new Vector2(0f, -138f), new Vector2(396f, 22f));
         hint.spriteAsset = ControlsHelp.ResolveSpriteAsset();
+        hint.textWrappingMode = TextWrappingModes.NoWrap;
+        hint.enableAutoSizing = true;
+        hint.fontSizeMin = 10f;
+        hint.fontSizeMax = 15f;
         hint.color = new Color(1f, 1f, 1f, 0.75f);
 
         // 舊的抓取說明已整合進操作說明面板
@@ -226,7 +237,170 @@ public static class PanelEnhancer
                 }
                 helpPopup?.Show();
             });
+
+            // 手把 / VR 搖桿導航：自動導航到不了「製作名單」(滑桿左右用來調音量)，改為明確指定
+            //   音量滑桿
+            //   操作說明  製作名單
+            //   返回
+            Selectable credits = creditsButton.GetComponent<Selectable>();
+            Transform backTransform = msgBox.Find("[BTN]返回");
+            Selectable back = backTransform != null ? backTransform.GetComponent<Selectable>() : null;
+            SetNavigation(slider, null, helpButton, null, null);
+            SetNavigation(helpButton, slider, back, null, credits);
+            SetNavigation(credits, slider, back, helpButton, null);
+            if (back != null) SetNavigation(back, helpButton, null, null, credits);
         }
+    }
+
+    private static void SetNavigation(Selectable selectable, Selectable up, Selectable down, Selectable left, Selectable right)
+    {
+        if (selectable == null) return;
+        selectable.navigation = new Navigation
+        {
+            mode = Navigation.Mode.Explicit,
+            selectOnUp = up,
+            selectOnDown = down,
+            selectOnLeft = left,
+            selectOnRight = right
+        };
+    }
+
+    #endregion
+
+    #region 主選單製作名單
+
+    private struct CreditRow
+    {
+        public string Label;
+        public string Name;
+        public string Id;
+    }
+
+    /// <summary>
+    /// 製作名單：讀取場景中原本的名單文字 (第一行為副標，「職稱：姓名 學號」，續行只寫姓名 學號)，
+    /// 重新排成 標題 / 副標 / 分隔線 / 職稱｜姓名｜學號 三欄，之後只需修改場景中的文字即可。
+    /// </summary>
+    private static void EnhanceCredits(RectTransform panel)
+    {
+        MarkEnhanced(panel);
+        RectTransform msgBox = panel.Find("MsgBox") as RectTransform;
+        if (msgBox == null) return;
+
+        TMP_Text source = null;
+        foreach (TMP_Text text in msgBox.GetComponentsInChildren<TMP_Text>(true))
+        {
+            if (text.GetComponentInParent<Button>(true) != null) continue;
+            source = text;
+            break;
+        }
+        if (source == null) return;
+
+        string subtitle = null;
+        List<CreditRow> rows = ParseCredits(source.text, ref subtitle);
+        if (rows.Count == 0) return;
+        source.gameObject.SetActive(false);
+
+        Color textColor = new Color(0.1f, 0.1f, 0.12f);
+        Color accent = new Color(0.1f, 0.6f, 0.48f);
+        Color muted = new Color(0.42f, 0.44f, 0.48f);
+
+        TextMeshProUGUI title = RuntimeUI.CreateText("CreditsTitle", msgBox, "製作名單", 44f, new Vector2(0f, 158f), new Vector2(600f, 56f));
+        title.color = textColor;
+        title.fontStyle = FontStyles.Bold;
+        if (!string.IsNullOrEmpty(subtitle))
+        {
+            TextMeshProUGUI sub = RuntimeUI.CreateText("CreditsSubtitle", msgBox, subtitle, 24f, new Vector2(0f, 118f), new Vector2(600f, 32f));
+            sub.color = muted;
+        }
+        RuntimeUI.CreateImage("CreditsDivider", msgBox, new Vector2(0f, 94f), new Vector2(560f, 3f), accent);
+
+        // 返回按鈕置中靠下，名單區塊置中於分隔線與返回按鈕之間
+        float bottomLimit = -msgBox.rect.height * 0.5f + 20f;
+        Transform back = msgBox.Find("[BTN]返回");
+        if (back != null)
+        {
+            RectTransform backRect = (RectTransform)back;
+            backRect.anchoredPosition = new Vector2(0f, 22f);
+            Vector3[] corners = new Vector3[4];
+            backRect.GetWorldCorners(corners);
+            bottomLimit = msgBox.InverseTransformPoint(corners[1]).y + 12f;
+        }
+        const float listTop = 82f;
+
+        int sections = 0;
+        foreach (CreditRow row in rows) if (row.Label != null) sections++;
+        const float sectionGap = 12f;
+        float gaps = Mathf.Max(0, sections - 1) * sectionGap;
+        float rowHeight = Mathf.Min(44f, (listTop - bottomLimit - gaps) / rows.Count);
+        float blockHeight = rows.Count * rowHeight + gaps;
+        float y = (listTop + bottomLimit) * 0.5f + blockHeight * 0.5f - rowHeight * 0.5f;
+        float fontSize = Mathf.Min(30f, rowHeight * 0.68f);
+
+        for (int i = 0; i < rows.Count; i++)
+        {
+            CreditRow row = rows[i];
+            if (row.Label != null && i > 0) y -= sectionGap;
+
+            if (row.Label != null)
+            {
+                TextMeshProUGUI label = RuntimeUI.CreateText($"CreditLabel_{i}", msgBox, row.Label, fontSize * 0.9f,
+                    new Vector2(-185f, y), new Vector2(170f, rowHeight), TextAlignmentOptions.Right);
+                label.color = accent;
+                label.fontStyle = FontStyles.Bold;
+            }
+
+            TextMeshProUGUI nameText = RuntimeUI.CreateText($"CreditName_{i}", msgBox, row.Name, fontSize,
+                new Vector2(10f, y), new Vector2(170f, rowHeight), TextAlignmentOptions.Left);
+            nameText.color = textColor;
+
+            if (!string.IsNullOrEmpty(row.Id))
+            {
+                TextMeshProUGUI idText = RuntimeUI.CreateText($"CreditId_{i}", msgBox, row.Id, fontSize * 0.85f,
+                    new Vector2(185f, y), new Vector2(170f, rowHeight), TextAlignmentOptions.Left);
+                idText.color = muted;
+                idText.characterSpacing = 4f;
+            }
+
+            y -= rowHeight;
+        }
+    }
+
+    private static List<CreditRow> ParseCredits(string content, ref string subtitle)
+    {
+        List<CreditRow> rows = new List<CreditRow>();
+        bool hasLabel = false;
+        foreach (string rawLine in content.Split('\n'))
+        {
+            string line = rawLine.Trim();
+            if (line.Length == 0) continue;
+
+            int separator = line.IndexOfAny(new[] { '：', ':' });
+            string label = null;
+            if (separator >= 0)
+            {
+                label = line.Substring(0, separator).Trim();
+                line = line.Substring(separator + 1).Trim();
+                hasLabel = true;
+            }
+            else if (!hasLabel)
+            {
+                // 第一個職稱之前的文字當作副標 (例如「專題製作」)
+                if (subtitle == null) subtitle = line;
+                continue;
+            }
+
+            // 結尾是數字則視為學號
+            string name = line;
+            string id = string.Empty;
+            int space = line.LastIndexOf(' ');
+            if (space > 0 && long.TryParse(line.Substring(space + 1), out _))
+            {
+                name = line.Substring(0, space).Trim();
+                id = line.Substring(space + 1);
+            }
+            rows.Add(new CreditRow { Label = label, Name = name, Id = id });
+        }
+        return rows;
     }
 
     #endregion
@@ -299,6 +473,8 @@ public static class PanelEnhancer
         slider.minValue = 0f;
         slider.maxValue = 1f;
         background.raycastTarget = true;
+        // 手把選中時的外框回饋 (執行時建立的滑桿可能晚於 UIButtonTweenFx 的自動安裝)
+        slider.gameObject.AddComponent<UIButtonTweenFx>();
         return slider;
     }
 

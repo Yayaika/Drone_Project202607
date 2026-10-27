@@ -38,6 +38,10 @@ public class UIPanelCtrl : MonoBehaviour
 
     private bool initialized;
 
+    private UIModalNavigation _modal;
+    // 手把 B 鍵關閉面板
+    private UIModalNavigation modal => _modal ??= new UIModalNavigation(transform, () => Switch(false));
+
     public bool IsOpen { get; private set; }
 
     void Start()
@@ -69,10 +73,13 @@ public class UIPanelCtrl : MonoBehaviour
                 UITween.StaggerIn(transform, 0.05f, -15f);
             }
             GameAudio.Play(GameSfx.PanelOpen, 0.7f);
+            // 手把 / VR 搖桿只能在面板內移動選取
+            modal.Begin();
         }
         else
         {
             UITween.HidePanel(canvasGroup);
+            modal.End();
         }
     }
 
@@ -91,5 +98,13 @@ public class UIPanelCtrl : MonoBehaviour
         canvasGroup.alpha = open ? 1 : 0;
         canvasGroup.blocksRaycasts = open;
         canvasGroup.interactable = open;
+        if (!initialized) return;
+        if (open) modal.Begin();
+        else modal.End();
+    }
+
+    private void OnDisable()
+    {
+        _modal?.End();
     }
 }
