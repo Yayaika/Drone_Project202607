@@ -40942,7 +40942,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\u5C08\u984C\u88FD\u4F5C\n\u6307\u5C0E\u8001\u5E2B\uFF1A\u838A\u555F\u5B8F
+  m_text: "\u5C08\u984C\u88FD\u4F5C\n\u6307\u5C0E\u8001\u5E2B\uFF1A\u838A\u5553\u5B8F
     \u6559\u6388\n\u5BE6\u4F5C\u5B78\u751F\uFF1A\u9673\u661F\u878D 10935105\n                
     \u9673\u5B50\u8B19 11227112\n                 \u8521\u5586\u5B87 11227127\n"
   m_isRightToLeft: 0
@@ -125757,6 +125757,7 @@ MonoBehaviour:
   skipLockTime: 0.6
   charactersPerSecond: 14
   uiDistance: 1.2
+  uiViewportFill: 0.75
   dialoguePopSound: {fileID: 8300000, guid: 16fba6d30ed741d4a9fdd6e79ee2f3ac, type: 3}
   locationCaption: "\u65B0\u6E2F\u5E02\u3000\u4E0A\u5348 7:42"
   leftSpeakerColor: {r: 0.2, g: 1, b: 0.75, a: 1}

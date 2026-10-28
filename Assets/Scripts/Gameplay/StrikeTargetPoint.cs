@@ -11,6 +11,8 @@ public class StrikeTargetPoint : MonoBehaviour
     public StrikeTarget.TargetKind kind = StrikeTarget.TargetKind.Bomb;
     [Tooltip("撞擊目標的飛入點 (留空 = 目標上方 8m)")]
     public Transform approach;
+    [Tooltip("導航顯示的目標名稱 (留空 = 依種類顯示「投彈目標」等)")]
+    public string label;
 
     public Vector3 ApproachPoint => approach != null ? approach.position : transform.position + Vector3.up * 8f;
 

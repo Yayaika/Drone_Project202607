@@ -73,6 +73,7 @@ public class GameManager : MonoBehaviour
     void Awake()
     {
         Instance = this;
+        LevelCatalog.EnsureModeForCurrentScene();
         EnsureEventSystem();
     }
 
@@ -125,6 +126,8 @@ public class GameManager : MonoBehaviour
         DroneController1 drone = GetDrone();
         // 競速：不論場景出生點在哪，都改到第一個檢查圈前方並面向它
         if (Mode == GameModeType.Race && drone != null) PlaceDroneAtCourseStart(drone);
+        // 打擊：機頭轉向出生點的前方 (場景設計的正面)，不再背對任務區
+        else if (Mode == GameModeType.Strike && drone != null) FaceSpawnerForward(drone);
         BindRespawn(drone);
         if (drone != null) drone.canControl = false;
 
@@ -238,6 +241,13 @@ public class GameManager : MonoBehaviour
         subscribedDrone.RespawnAtCheckpoint(lastCheckpointPosition, RespawnRotationFacing(subscribedDrone, facing));
     }
 
+    /// <summary>無人機被炸毀後：在最後檢查點 (打擊模式為重新部署點) 生成，不經過確認視窗</summary>
+    public void RespawnAfterDestroyed()
+    {
+        if (subscribedDrone == null) BindRespawn(GetDrone());
+        RespawnAtLastCheckpoint();
+    }
+
     /// <summary>把無人機傳送到指定位置並面向 facing，同時設為之後按 R 的重生點 (打擊模式撞擊後重新部署)</summary>
     public void RespawnAt(Vector3 position, Vector3 facing)
     {
@@ -307,6 +317,19 @@ public class GameManager : MonoBehaviour
         Quaternion rotation = RespawnRotationFacing(drone, facing);
         drone.RespawnAtCheckpoint(start, rotation);
         // 起飛點的旋轉與 RespawnAtCheckpoint 參數同一套定義 (沒有 GameManager 時的備用重生也朝向第一圈)
+        drone.SetHomePoint(start, rotation);
+        RecordRespawnPoint(start, facing);
+    }
+
+    /// <summary>原地把機頭 (第一人稱鏡頭) 轉向 SpawnCtrl 的 +Z，並設為起飛點與 R 鍵重生點</summary>
+    private void FaceSpawnerForward(DroneController1 drone)
+    {
+        SpawnCtrl spawner = FindFirstObjectByType<SpawnCtrl>();
+        if (spawner == null || !TryFlatDirection(spawner.transform.forward, out Vector3 facing)) return;
+
+        Vector3 start = drone.transform.position;
+        Quaternion rotation = RespawnRotationFacing(drone, facing);
+        drone.RespawnAtCheckpoint(start, rotation);
         drone.SetHomePoint(start, rotation);
         RecordRespawnPoint(start, facing);
     }

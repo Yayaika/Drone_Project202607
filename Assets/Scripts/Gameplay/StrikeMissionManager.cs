@@ -31,6 +31,11 @@ public class StrikeMissionManager : MonoBehaviour
     [SerializeField] private int bombTargetScore = 500;
     [SerializeField] private int ramTargetScore = 800;
     [SerializeField] private int vehicleTargetScore = 700;
+    [SerializeField] private int droneTargetScore = 1000;
+    [Tooltip("擊斃一名敵方軍人的加分 (軍人不計入必須摧毀的目標)")]
+    [SerializeField] private int soldierScore = 150;
+    [Tooltip("誤傷一名平民工人的扣分")]
+    [SerializeField] private int civilianPenalty = 300;
     [SerializeField] private int timeBonusPerSecond = 5;
 
     [Header("配置")]
@@ -48,7 +53,10 @@ public class StrikeMissionManager : MonoBehaviour
     private int destroyedBomb;
     private int destroyedRam;
     private int destroyedVehicle;
+    private int destroyedDrone;
     private int totalScore;
+    private int soldiersKilled;
+    private int civilianCasualties;
     private float nextUpdate;
     private bool warned60;
     private bool warned30;
@@ -96,6 +104,36 @@ public class StrikeMissionManager : MonoBehaviour
         }
     }
 
+    private void OnEnable()
+    {
+        SoldierUnit.OnKilled += HandleSoldierKilled;
+        FactoryWorker.OnCasualty += HandleCivilianCasualty;
+    }
+
+    private void OnDisable()
+    {
+        SoldierUnit.OnKilled -= HandleSoldierKilled;
+        FactoryWorker.OnCasualty -= HandleCivilianCasualty;
+    }
+
+    private void HandleCivilianCasualty(FactoryWorker worker)
+    {
+        if (phase != Phase.Running) return;
+        civilianCasualties++;
+        totalScore -= civilianPenalty;
+        GameManager.Instance?.ShowCenterMessage($"誤傷平民 -{civilianPenalty}", RuntimeUI.WarningColor, 1.2f);
+        UpdateProgress();
+    }
+
+    private void HandleSoldierKilled(SoldierUnit soldier, bool rammed)
+    {
+        if (phase != Phase.Running) return;
+        soldiersKilled++;
+        totalScore += soldierScore;
+        GameManager.Instance?.ShowCenterMessage($"擊斃敵兵 +{soldierScore}", new Color(1f, 0.75f, 0.35f), 0.9f);
+        UpdateProgress();
+    }
+
     private void OnDestroy()
     {
         if (GameManager.Instance != null) GameManager.Instance.OnRaceStarted -= BeginMission;
@@ -108,7 +146,10 @@ public class StrikeMissionManager : MonoBehaviour
     private void BeginMission()
     {
         phase = Phase.Running;
-        GameManager.Instance?.ShowCenterMessage($"摧毀 {targets.Count} 個目標！\n紅：投彈　紫：撞擊　橘：移動車輛", new Color(1f, 0.6f, 0.3f), 2.2f);
+        string legend = "紅：投彈　紫：撞擊";
+        if (CountOf(StrikeTarget.TargetKind.Vehicle) > 0) legend += "　橘：移動車輛";
+        if (CountOf(StrikeTarget.TargetKind.Drone) > 0) legend += "　青：敵方無人機";
+        GameManager.Instance?.ShowCenterMessage($"摧毀 {targets.Count} 個目標！\n{legend}", new Color(1f, 0.6f, 0.3f), 2.2f);
         UpdateNavigation();
         UpdateProgress();
     }
@@ -119,6 +160,8 @@ public class StrikeMissionManager : MonoBehaviour
     {
         // 同一關卡使用固定種子，讓每次的目標相同，排行榜才公平
         System.Random random = new System.Random((LevelCatalog.CurrentLevel?.CitySeed ?? 12345) * 7 + 11);
+
+        PlaceEnemyDrones();
 
         StrikeTargetPoint[] manualPoints = FindObjectsByType<StrikeTargetPoint>(FindObjectsSortMode.InstanceID);
         if (manualPoints.Length > 0)
@@ -179,7 +222,20 @@ public class StrikeMissionManager : MonoBehaviour
             {
                 ground = hit.point;
             }
-            AddTarget(StrikeTarget.Create(ground, point.kind, point.ApproachPoint, point.transform.eulerAngles.y));
+            AddTarget(StrikeTarget.Create(ground, point.kind, point.ApproachPoint, point.transform.eulerAngles.y, point.label));
+        }
+    }
+
+    /// <summary>場景中的每條敵方無人機航線 (<see cref="EnemyDronePatrol"/>) 都是一個移動目標</summary>
+    private void PlaceEnemyDrones()
+    {
+        foreach (EnemyDronePatrol patrol in FindObjectsByType<EnemyDronePatrol>(FindObjectsSortMode.InstanceID))
+        {
+            StrikeTarget target = StrikeTarget.AttachToDrone(patrol);
+            if (target == null) continue;
+            // 無人機沿航線移動，不改父物件
+            target.OnDestroyed += HandleTargetDestroyed;
+            targets.Add(target);
         }
     }
 
@@ -394,6 +450,10 @@ public class StrikeMissionManager : MonoBehaviour
                 score = vehicleTargetScore;
                 destroyedVehicle++;
                 break;
+            case StrikeTarget.TargetKind.Drone:
+                score = droneTargetScore;
+                destroyedDrone++;
+                break;
             default:
                 score = bombTargetScore;
                 destroyedBomb++;
@@ -402,7 +462,8 @@ public class StrikeMissionManager : MonoBehaviour
         totalScore += score;
 
         GameAudio.Play(GameSfx.Checkpoint);
-        GameManager.Instance?.ShowCenterMessage($"{(rammed ? "撞擊" : "投彈")}摧毀！ +{score}", StrikeTarget.ColorOf(target.Kind), 1.2f);
+        string verb = target.Kind == StrikeTarget.TargetKind.Drone ? "擊落" : "摧毀";
+        GameManager.Instance?.ShowCenterMessage($"{(rammed ? "撞擊" : "投彈")}{verb}！ +{score}", StrikeTarget.ColorOf(target.Kind), 1.2f);
 
         if (RemainingCount == 0)
         {
@@ -501,6 +562,12 @@ public class StrikeMissionManager : MonoBehaviour
         {
             result.Details.Add($"車輛目標 {destroyedVehicle} / {CountOf(StrikeTarget.TargetKind.Vehicle)}　+{destroyedVehicle * vehicleTargetScore}");
         }
+        if (CountOf(StrikeTarget.TargetKind.Drone) > 0)
+        {
+            result.Details.Add($"敵方無人機 {destroyedDrone} / {CountOf(StrikeTarget.TargetKind.Drone)}　+{destroyedDrone * droneTargetScore}");
+        }
+        if (soldiersKilled > 0) result.Details.Add($"擊斃敵兵 {soldiersKilled}　+{soldiersKilled * soldierScore}");
+        if (civilianCasualties > 0) result.Details.Add($"誤傷平民 {civilianCasualties}　-{civilianCasualties * civilianPenalty}");
         if (timeBonus > 0) result.Details.Add($"全數摧毀　剩餘時間獎勵 +{timeBonus}");
         result.Medal = !result.Success ? Medal.None
             : allClear ? Medal.Gold
@@ -513,7 +580,7 @@ public class StrikeMissionManager : MonoBehaviour
 
     #endregion
 
-    private int DestroyedCount => destroyedBomb + destroyedRam + destroyedVehicle;
+    private int DestroyedCount => destroyedBomb + destroyedRam + destroyedVehicle + destroyedDrone;
 
     private float CurrentTime => GameManager.Instance != null ? GameManager.Instance.ElapsedTime : Time.timeSinceLevelLoad;
 
@@ -564,8 +631,13 @@ public class StrikeMissionManager : MonoBehaviour
         {
             StrikeTarget.TargetKind.Ram => "撞擊目標（低飛繞入）",
             StrikeTarget.TargetKind.Vehicle => "移動車輛（投彈或撞擊）",
+            StrikeTarget.TargetKind.Drone => "敵方無人機（追擊撞落）",
             _ => "投彈目標"
         };
+        if (!string.IsNullOrEmpty(nearest.Label))
+        {
+            label = nearest.Kind == StrikeTarget.TargetKind.Ram ? $"{nearest.Label}（撞擊）" : $"{nearest.Label}（投彈）";
+        }
         NavigationTarget.Set(nearest.transform.position + Vector3.up * 0.6f, label, StrikeTarget.ColorOf(nearest.Kind));
     }
 
@@ -575,6 +647,7 @@ public class StrikeMissionManager : MonoBehaviour
         float remaining = Mathf.Max(0f, timeLimit - CurrentTime);
         int destroyed = DestroyedCount;
         string vehicles = CountOf(StrikeTarget.TargetKind.Vehicle) > 0 ? $"  車輛 {destroyedVehicle}/{CountOf(StrikeTarget.TargetKind.Vehicle)}" : string.Empty;
+        if (CountOf(StrikeTarget.TargetKind.Drone) > 0) vehicles += $"  敵機 {destroyedDrone}/{CountOf(StrikeTarget.TargetKind.Drone)}";
         GameManager.Instance.SetProgress(
             $"TARGET {destroyed}/{targets.Count}  投彈 {destroyedBomb}/{CountOf(StrikeTarget.TargetKind.Bomb)}  撞擊 {destroyedRam}/{CountOf(StrikeTarget.TargetKind.Ram)}{vehicles}\n剩餘 {RuntimeUI.FormatTime(remaining).Substring(0, 5)}  分數 {totalScore}",
             (float)destroyed / Mathf.Max(1, targets.Count));

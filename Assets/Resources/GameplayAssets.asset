@@ -19,3 +19,10 @@ MonoBehaviour:
   smallFireEffect: {fileID: 100000, guid: 5a4723eba1f3efd4e992d78be01cb3f0, type: 3}
   smokeEffect: {fileID: 100000, guid: 6a3cb4ac8fa12944ba1233cbec0e9c69, type: 3}
   airplanePrefab: {fileID: 3799732381268282331, guid: 7da7f9f2fecda974c9b3e16e28330244, type: 3}
+  trafficDronePrefab: {fileID: 7231887364440564934, guid: c53e58c59cba20e4ab6f2080fbdafb5f, type: 3}
+  soldierPrefab: {fileID: 6584180020933914222, guid: a6db06ca163a2a34c81ebb77965f1ff2, type: 3}
+  soldierAnimator: {fileID: 9100000, guid: af53fd24ffd24c7419aae12c41ddd075, type: 2}
+  bulletPrefab: {fileID: 8297191405790434548, guid: 0707898d3f02d8c499685d8871d5031a, type: 3}
+  muzzleFlashEffect: {fileID: 100006, guid: c888f0c922d622147bbdbe2ca794142b, type: 3}
+  bulletImpactEffect: {fileID: 100002, guid: 99c73c92ac40473459640b165473206f, type: 3}
+  workerAnimator: {fileID: 9100000, guid: 64cc006fb88a8cc43aee0369a10ecfbf, type: 2}

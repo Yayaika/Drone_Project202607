@@ -80,6 +80,8 @@ public static class StrikeSceneBuilder
 
         PlaceSpawner(scene);
         SaveMeshes(level);
+        // 已執行過「港區寫實化」(選單 15) 時套回寫實材質
+        PortRealismBuilder.ApplyToLevel(level);
 
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
@@ -89,7 +91,7 @@ public static class StrikeSceneBuilder
 
     #region 範本與系統物件
 
-    private static void RemoveTemplateCourse(Scene scene)
+    internal static void RemoveTemplateCourse(Scene scene)
     {
         foreach (GameObject root in scene.GetRootGameObjects())
         {
@@ -461,12 +463,13 @@ public static class StrikeSceneBuilder
         AddPoint(points, "Ram_PipeRack", StrikeTarget.TargetKind.Ram, new Vector3(-6f, 0f, 40f), new Vector3(-6f, 3f, 30f));
     }
 
-    private static void AddPoint(Transform parent, string name, StrikeTarget.TargetKind kind, Vector3 position, Vector3? approach)
+    internal static void AddPoint(Transform parent, string name, StrikeTarget.TargetKind kind, Vector3 position, Vector3? approach, string label = null)
     {
         StrikeTargetPoint point = new GameObject(name).AddComponent<StrikeTargetPoint>();
         point.transform.SetParent(parent, false);
         point.transform.position = position;
         point.kind = kind;
+        point.label = label;
         if (approach.HasValue)
         {
             // 目標面向飛入方向 (先轉向再放子物件，否則子物件會跟著父物件旋轉而偏離)
@@ -513,29 +516,33 @@ public static class StrikeSceneBuilder
 
     #region 工具
 
-    private static GameObject[] CarPrefabs()
+    /// <summary>港區車流與停車場用的一般車輛 (車輛素材包內混有飛機、怪獸卡車與軍車，排除)</summary>
+    internal static GameObject[] CarPrefabs()
     {
+        string[] excluded = { "police", "plane", "monster", "military" };
         return AssetDatabase.FindAssets("t:Prefab", new[] { CarFolder })
             .Select(AssetDatabase.GUIDToAssetPath)
             .OrderBy(path => path)
             .Select(AssetDatabase.LoadAssetAtPath<GameObject>)
-            .Where(prefab => prefab != null && !prefab.name.ToLowerInvariant().Contains("police"))
+            .Where(prefab => prefab != null && !excluded.Any(prefab.name.ToLowerInvariant().Contains))
             .ToArray();
     }
 
-    private static void SaveMeshes(Transform level)
+    private static void SaveMeshes(Transform level) => SaveMeshes(level, MeshFolder);
+
+    internal static void SaveMeshes(Transform level, string folder)
     {
         int index = 0;
         foreach (MeshFilter filter in level.GetComponentsInChildren<MeshFilter>(true))
         {
             Mesh mesh = filter.sharedMesh;
             if (mesh == null || AssetDatabase.Contains(mesh)) continue;
-            AssetDatabase.CreateAsset(mesh, $"{MeshFolder}/{mesh.name}_{index++}.asset");
+            AssetDatabase.CreateAsset(mesh, $"{folder}/{mesh.name}_{index++}.asset");
         }
         AssetDatabase.SaveAssets();
     }
 
-    private static void EnsureFolder(string path)
+    internal static void EnsureFolder(string path)
     {
         string[] parts = path.Split('/');
         string current = parts[0];
@@ -547,11 +554,13 @@ public static class StrikeSceneBuilder
         }
     }
 
-    private static void AddToBuildSettings()
+    private static void AddToBuildSettings() => AddToBuildSettings(ScenePath);
+
+    internal static void AddToBuildSettings(string scenePath)
     {
         List<EditorBuildSettingsScene> scenes = EditorBuildSettings.scenes.ToList();
-        if (scenes.Any(scene => scene.path == ScenePath)) return;
-        scenes.Add(new EditorBuildSettingsScene(ScenePath, true));
+        if (scenes.Any(scene => scene.path == scenePath)) return;
+        scenes.Add(new EditorBuildSettingsScene(scenePath, true));
         EditorBuildSettings.scenes = scenes.ToArray();
     }
 

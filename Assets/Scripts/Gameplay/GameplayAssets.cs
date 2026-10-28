@@ -23,6 +23,22 @@ public class GameplayAssets : ScriptableObject
 
     [Header("空中障礙")]
     public GameObject airplanePrefab;
+    [Tooltip("空中交通改用的無人機模型 (指定後取代小飛機)")]
+    public GameObject trafficDronePrefab;
+
+    [Header("敵方軍人 (LowPolySoldiers_demo / Bullet FX Pack / War FX)")]
+    [Tooltip("軍人模型 (槍械為同一個蒙皮網格，跟著動作)")]
+    public GameObject soldierPrefab;
+    [Tooltip("軍人動畫控制器 (Idle / Run / Shoot，參數 Speed、Shoot)，由選單「無人機遊戲/16」建立")]
+    public RuntimeAnimatorController soldierAnimator;
+    [Tooltip("子彈 (Bullet FX Pack 的 Bullet.prefab，使用 Trail 模式)")]
+    public GameObject bulletPrefab;
+    public GameObject muzzleFlashEffect;
+    public GameObject bulletImpactEffect;
+
+    [Header("平民工人 (CityPeople)")]
+    [Tooltip("工人動畫控制器 (Humanoid：Idle / Walk / Run / LookAround / Phone / Hammer / Drill / Wrench / PipeWrench)，由選單「無人機遊戲/16」建立")]
+    public RuntimeAnimatorController workerAnimator;
 
     private static GameplayAssets cached;
     private static bool loaded;

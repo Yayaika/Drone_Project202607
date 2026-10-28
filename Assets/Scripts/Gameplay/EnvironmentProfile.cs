@@ -15,6 +15,21 @@ public class EnvironmentProfile : ScriptableObject
     [Tooltip("進入關卡時的時間 (0~24)；小於 0 代表隨機")]
     public float startHour = 9.5f;
 
+    [System.Serializable]
+    public struct SkyboxSun
+    {
+        [Tooltip("白天天空盒 (場景原本的天空盒材質)")]
+        public Material skybox;
+        [Tooltip("天空盒畫中太陽的方位角 (度，0 = +Z 北、90 = +X 東)")]
+        public float yaw;
+        [Tooltip("天空盒畫中太陽的仰角 (度)")]
+        public float elevation;
+    }
+
+    [Header("天空盒太陽")]
+    [Tooltip("天空盒畫有太陽時，白天的平行光固定對準畫中太陽 (陰影方向與天空一致)，時間只改變光的強度、顏色與環境光")]
+    public SkyboxSun[] skyboxSuns = new SkyboxSun[0];
+
     [Header("天氣")]
     [Tooltip("天氣多久變化一次 (秒)")]
     public Vector2 weatherChangeInterval = new Vector2(180f, 360f);

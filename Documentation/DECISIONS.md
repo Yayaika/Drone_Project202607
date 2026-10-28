@@ -357,3 +357,43 @@
 - **替代方案：**
 - **影響範圍：**
 - **相關檔案：**
+
+## D-033：工廠室內打擊關卡與敵方無人機
+
+- **日期：** 2026-10-28
+- **狀態：** 已確認（使用者要求：工廠主題場景，穿梭管道、樓梯、房間、作業設備攻擊高價值目標；目標也可以是其他無人機形成追逐；場景內不加說明；碰撞玩法要用對應的無人機）
+- **決定：**
+  - 新場景 `StrikeFactory` 由 `Editor/FactorySceneBuilder.cs`（選單 14）以 SampleScene 為範本程序化建立（同港區作法，CityMeshBuilder 合併網格＋MeshCollider），移除範本的外圍景觀與「操作說明／簡介」看板。重新執行會覆蓋 `StrikeFactory_Level`。
+  - 室內照明：場景有 `IndoorLighting` 時不建立 EnvironmentController（晝夜/雨）與 AircraftTraffic；改用固定 Flat 環境光＋20 盞不投影點光源（URP Forward+，無每物件燈數限制）＋屋頂天窗日光。
+  - 新增目標種類 `StrikeTarget.TargetKind.Drone`：`EnemyDronePatrol` 子物件為航點，執行時生成無人機（Racing Drone v2 模型＋紅色警示燈）以運動學剛體沿直線航段移動；玩家接近時在航點選擇遠離玩家的方向並加速。航點需放在開闊處（建構工具已以 SphereCast 驗證）。
+  - `StrikeTargetPoint.label` 讓導航顯示目標名稱（例如「伺服器機櫃（撞擊）」）。
+  - 打擊模式開場：機頭轉向 SpawnCtrl 的 +Z；SpawnCtrl 在打擊模式下自動選用 PlayerDB 中有 `DroneBombDropper` 的機型（不改寫選單選擇 `GameManager1.playerIndex`）。
+- **原因：** 室內場景用天氣系統會在廠房裡下雨／變黑夜；敵機用固定航點比導航網格簡單且可在 Editor 調整。
+- **替代方案：** NavMesh/3D 尋路的敵機 AI（未採用，成本高）；只在模式選擇面板鎖定（已存在，但直接開場景時仍會用錯機型）。
+- **相關檔案：** `Scripts/Editor/FactorySceneBuilder.cs`、`Scripts/Level/EnemyDronePatrol.cs`、`Scripts/Level/IndoorLighting.cs`、`Scripts/Gameplay/StrikeTarget.cs`、`Scripts/Gameplay/StrikeMissionManager.cs`、`Scripts/Gameplay/LevelCatalog.cs`、`Scripts/SpawnCtrl.cs`、`Scripts/GameManager.cs`、`Scenes/StrikeFactory.unity`
+
+## D-034：港區寫實化試做、天空盒太陽對齊、夜間照明、炸毀重生
+
+- **日期：** 2026-10-28
+- **狀態：** 已確認（使用者要求：場景更寫實、遠山用 Terrain、多用 Download 素材、沿用素材天空盒並注意太陽與光影、港區不應是島嶼、路燈/車燈夜間點亮、空中飛機換成無人機、目標不要光柱、爆炸波及無人機要摧毀並重生）
+- **決定：**
+  - 寫實化先只做港區（選單 15，可重複執行）：港區專屬材質直接加貼圖；與其他場景共用的 OrganicCity 材質改用港區專屬新材質替換（不改原檔）。重建港區場景（選單 11）會自動套回。
+  - `OutskirtsSceneryBuilder` 新增 `UnityTerrain`、`CoastZ`、`GateRoads` 設定（目前只有港區開啟）：Terrain 與網格版共用同一高度函式；TerrainData 必須先存成資產再寫入圖層混合，否則 splat 不會存檔。
+  - 天空盒：Cubemap 版與全景圖的方位對應不同，太陽方向以渲染取樣量測（Sky_Anime_03_Day_a：方位 56°、仰角 40°）。白天平行光固定對準畫中太陽，晝夜只改變強度、顏色與環境光。
+  - 夜間照明以 `EnvironmentController.IsNight` 控制；路燈以 LowpolyStreetPack 隱藏的 LightShape 光錐定位燈頭；場景中名稱為 NightLamp* 的燈一併管理。
+  - 打擊目標不用光柱，找目標靠 HUD 導航與目標頂部的閃爍警示燈。
+- **替代方案：** 程序化大氣天空（Skybox/Procedural，已試做但使用者要求用素材天空盒）；Prefab 直接開啟後處理（會影響所有場景，未採用）。
+- **相關檔案：** `Scripts/Editor/PortRealismBuilder.cs`、`Scripts/Editor/ProceduralTextures.cs`、`Scripts/Editor/OutskirtsSceneryBuilder.cs`、`Scripts/Level/SceneRealism.cs`、`Scripts/Level/StreetLampLights.cs`、`Scripts/Level/PropellerSpinner.cs`、`Scripts/Level/AircraftTraffic.cs`、`Scripts/Gameplay/EnvironmentController.cs`、`Scripts/Gameplay/EnvironmentProfile.cs`、`Scripts/Gameplay/StrikeTarget.cs`、`Scripts/Gameplay/DroneDestruction.cs`、`Scripts/Gameplay/Bombing.cs`、`Resources/EnvironmentProfile.asset`、`Resources/GameplayAssets.asset`、`Scenes/StrikePort.unity`
+
+## D-035：敵方軍人、工業區、爆炸驚慌
+
+- **日期：** 2026-10-29
+- **狀態：** 已確認（使用者要求：LowPolySoldiers_demo 軍人可被攻擊也會攻擊無人機、槍械要匹配動作且有多樣性、子彈用 Bullet FX Pack、比例匹配、軍人做成 Prefab 並合理分布；工廠要多棟有外景；爆炸時人會驚慌）
+- **決定：**
+  - 軍人以 Prefab 呈現兵種差異（槍械外觀與射擊參數存在 `SoldierUnit` 序列化欄位）；示範包只有一把與士兵同網格的步槍，M4 類兵種改用移除步槍子網格的網格 (`Soldier_NoRifle.asset`)，再把 War FX 的 M4 模型綁在右手骨骼。
+  - Bullet FX Pack 為 Built-in 管線素材：只使用 Trail 模式 (unlit vert/frag 著色器在 URP 可顯示)，子彈本體換 URP Unlit；命中以射線判定，不用素材的物理碰撞 (避免把無人機撞開)。曳光顏色以複製 BulletTrailMat 改色。
+  - 軍人只在打擊模式、遊戲計時開始後開火；配置原則：出入口與目標守衛、制高點精確射手、開闊處巡邏、要道機槍，皆在起飛點射程外。
+  - 工業區：A 棟沿用原室內廠房 (原點)，其餘建築在環狀道路外側；不再是室內關卡 (晝夜天氣、路燈照常)。
+  - 驚慌以靜態事件 `PanicAlarm` 廣播，平民 (工人、城市路人) 訂閱；軍人不受影響。
+- **替代方案：** 以 IK 讓軍人雙手握任意槍 (未採用，示範模型為 Generic 骨架)；工人用 NavMesh 逃跑 (未採用，以前方射線轉向避障)。
+- **相關檔案：** `Scripts/Gameplay/SoldierUnit.cs`、`SoldierRound.cs`、`SoldierPoint.cs`、`DroneArmor.cs`、`FactoryWorker.cs`、`WorkerPoint.cs`、`PanicAlarm.cs`、`Scripts/Editor/SoldierSetup.cs`、`Scripts/Editor/FactorySceneBuilder.cs`、`Scripts/Level/CityPedestrians.cs`、`Prefabs/Soldier/`、`Animations/Soldier/`、`Animations/Worker/`

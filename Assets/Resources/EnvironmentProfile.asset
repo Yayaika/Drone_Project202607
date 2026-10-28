@@ -15,6 +15,10 @@ MonoBehaviour:
   nightSkybox: {fileID: 2100000, guid: c1c961cbd00909b45b34d97fd7df5cbf, type: 2}
   dayLengthMinutes: 12
   startHour: 9.5
+  skyboxSuns:
+  - skybox: {fileID: 2100000, guid: 55e64e617a8bfff4ba846574e2651eb9, type: 2}
+    yaw: 56
+    elevation: 40
   weatherChangeInterval: {x: 180, y: 360}
   weatherBlendSeconds: 20
   clearWeight: 0.4

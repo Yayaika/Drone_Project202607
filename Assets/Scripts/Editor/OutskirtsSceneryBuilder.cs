@@ -53,6 +53,12 @@ public static class OutskirtsSceneryBuilder
         public float MountainStart = 0.38f;     // 佔地形最遠距離的比例
         public float MountainPeak = 0.78f;
         public float HillHeight = 9f;
+        /// <summary>地形改用 Unity Terrain (高度圖 + PBR 圖層混合)，取代低多邊形的平面著色網格</summary>
+        public bool UnityTerrain;
+        /// <summary>直線海岸 (世界 Z)：大於此值為海、小於為陸地 (港區碼頭)；離場地越遠海岸線越彎曲。NaN = 不使用</summary>
+        public float CoastZ = float.NaN;
+        /// <summary>從空氣牆上這些點 (XZ) 往外直直延伸的聯外道路 (例如港區大門)</summary>
+        public Vector2[] GateRoads = new Vector2[0];
 
         public bool RingRoad = true;
         public float RoadOffset = 18f;
@@ -106,18 +112,23 @@ public static class OutskirtsSceneryBuilder
                     FarHeight = new Vector2(5f, 8f), Footprint = new Vector2(8f, 13f), TankChance = 0.35f,
                     Fields = 46, FieldMin = 20f, FieldMax = 300f, NearTrees = 200, HillTrees = 1400
                 };
-            case "StrikePort": // 港區在海中央：北方對岸港鎮與山、幾座離島
+            case "StrikePort": // 沿海港區：北面是港池與海 (海岸線接碼頭岸壁)，南、東、西為港口城市與工業區，後方丘陵
                 return new Profile
                 {
-                    Seed = 55, SeaDefault = true, AddWater = false, WaterLevel = -2f, BaseOffset = 0f,
-                    Sectors = new[]
-                    {
-                        new Sector(90f, 62f, 230f), new Sector(18f, 13f, 360f),
-                        new Sector(212f, 18f, 420f), new Sector(-58f, 10f, 330f)
-                    },
-                    MountainHeight = 170f, MountainStart = 0.55f, MountainPeak = 0.88f, RingRoad = false, RadialRoads = 0,
-                    Buildings = 120, BuildMin = 235f, BuildMax = 400f, NearHeight = new Vector2(8f, 30f),
-                    FarHeight = new Vector2(6f, 14f), TankChance = 0.4f, Fields = 0, NearTrees = 120, HillTrees = 900
+                    Seed = 55, AddWater = false, WaterLevel = -2f, BaseOffset = -0.05f, UnityTerrain = true, CoastZ = 78f,
+                    GateRoads = new[] { new Vector2(0f, -100f) },
+                    MountainHeight = 150f, MountainStart = 0.5f, MountainPeak = 0.9f, HillHeight = 7f, RingRoad = false, RadialRoads = 4,
+                    Buildings = 260, BuildMin = 22f, BuildMax = 320f, NearHeight = new Vector2(8f, 26f),
+                    FarHeight = new Vector2(7f, 18f), Footprint = new Vector2(10f, 24f), TankChance = 0.55f,
+                    Fields = 0, NearTrees = 140, HillTrees = 1000
+                };
+            case "StrikeFactory": // 內陸工業區：周圍工業郊區與農地，後方丘陵；南側大門聯外道路
+                return new Profile
+                {
+                    Seed = 66, BaseOffset = -0.05f, UnityTerrain = true, MountainHeight = 160f, MountainStart = 0.5f, MountainPeak = 0.9f,
+                    HillHeight = 6f, RoadOffset = 16f, RadialRoads = 4, GateRoads = new[] { new Vector2(-25f, -160f) },
+                    Buildings = 180, BuildMin = 30f, BuildMax = 300f, NearHeight = new Vector2(8f, 20f), FarHeight = new Vector2(6f, 14f),
+                    Footprint = new Vector2(12f, 28f), TankChance = 0.6f, Fields = 14, FieldMin = 120f, FieldMax = 320f, NearTrees = 160, HillTrees = 1000
                 };
             default:
                 return new Profile { Buildings = 120, Fields = 10 };
@@ -283,7 +294,7 @@ public static class OutskirtsSceneryBuilder
             mountainStart = dEnd * profile.MountainStart;
             mountainPeak = dEnd * profile.MountainPeak;
             noiseOffset = new Vector2(profile.Seed * 37.1f, profile.Seed * 91.7f);
-            hasSea = profile.SeaDefault || profile.Sectors.Length > 0;
+            hasSea = profile.SeaDefault || profile.Sectors.Length > 0 || !float.IsNaN(profile.CoastZ);
         }
 
         public GameObject Run()
@@ -424,6 +435,15 @@ public static class OutskirtsSceneryBuilder
 
         private float LandAmount(Vector2 p, float angle, float d)
         {
+            if (!float.IsNaN(profile.CoastZ))
+            {
+                // 場地兩側的海岸線與碼頭岸壁對齊，越往外越彎 (海灣與岬角)
+                float offset = Mathf.Max(0f, Mathf.Abs(p.x - center.x) - half.x);
+                float bend = Mathf.SmoothStep(0f, 1f, offset / 180f) * (Noise(p, 220f) - 0.35f) * 120f;
+                float coast = profile.CoastZ + bend;
+                return 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(coast - 6f, coast + 6f, p.y));
+            }
+
             float sea = 0f;
             foreach (Sector sector in profile.Sectors)
             {
@@ -485,6 +505,11 @@ public static class OutskirtsSceneryBuilder
 
         private void BuildTerrain()
         {
+            if (profile.UnityTerrain)
+            {
+                BuildUnityTerrain();
+                return;
+            }
             const int angles = 240;
             List<float> rings = Rings();
             Vector3[,] grid = new Vector3[angles + 1, rings.Count];
@@ -511,6 +536,144 @@ public static class OutskirtsSceneryBuilder
                 }
             }
             Finish(builder.Build("Terrain", root, false), "Terrain");
+        }
+
+        /// <summary>
+        /// Unity Terrain 版地形：與網格版使用同一個 <see cref="Height(Vector2)"/>，建築、樹木與離島位置不變。
+        /// 正方形範圍涵蓋空氣牆外 dEnd 的距離；場內壓到地面以下避免穿出。
+        /// 圖層 (沙、草、森林、岩石、雪) 依高度、坡度與雜訊混合，貼圖由 <see cref="ProceduralTextures"/> 產生。
+        /// 純裝飾：不加 TerrainCollider、不投影。
+        /// </summary>
+        private void BuildUnityTerrain()
+        {
+            const int resolution = 1025, alphaResolution = 512;
+            float extent = Mathf.Max(half.x, half.y) + dEnd;
+            float minY = waterY - 8f;
+            float sizeY = baseY + profile.MountainHeight * 1.3f + profile.HillHeight + 5f - minY;
+            Vector2 origin = center - new Vector2(extent, extent);
+
+            float[,] heights = new float[resolution, resolution];
+            for (int z = 0; z < resolution; z++)
+            {
+                for (int x = 0; x < resolution; x++)
+                {
+                    Vector2 p = origin + new Vector2(x, z) * (2f * extent / (resolution - 1));
+                    float h = Height(p);
+                    // 場內壓到地面以下 (內縮 2m，與場內地面重疊的邊緣略低於地面，不會在空氣牆下露出溝縫)
+                    Rect inner = new Rect(area.xMin + 2f, area.yMin + 2f, area.width - 4f, area.height - 4f);
+                    if (inner.Contains(p)) h = Mathf.Min(h, groundY - 3f);
+                    heights[z, x] = Mathf.Clamp01((h - minY) / sizeY);
+                }
+            }
+
+            // 先存成資產再寫入高度與圖層混合：混合用的 splat 貼圖是 TerrainData 的子資產，資產建立前寫入的不會被存檔
+            string dataPath = $"{meshFolder}/TerrainData.asset";
+            AssetDatabase.DeleteAsset(dataPath);
+            TerrainData data = new TerrainData { heightmapResolution = resolution };
+            data.size = new Vector3(2f * extent, sizeY, 2f * extent);
+            AssetDatabase.CreateAsset(data, dataPath);
+            data.SetHeights(0, 0, heights);
+            data.alphamapResolution = alphaResolution;
+            data.baseMapResolution = 1024;
+            data.terrainLayers = new[]
+            {
+                Layer("Sand", ProceduralTextures.TerrainSand(), 6f),
+                Layer("Grass", ProceduralTextures.TerrainGrass(), 8f),
+                Layer("Forest", ProceduralTextures.TerrainForest(), 14f),
+                Layer("Rock", ProceduralTextures.TerrainRock(), 18f),
+                Layer("Snow", ProceduralTextures.TerrainSnow(), 10f)
+            };
+
+            float[,,] alpha = new float[alphaResolution, alphaResolution, 5];
+            float mountain = profile.MountainHeight;
+            for (int z = 0; z < alphaResolution; z++)
+            {
+                for (int x = 0; x < alphaResolution; x++)
+                {
+                    float u = x / (alphaResolution - 1f), v = z / (alphaResolution - 1f);
+                    Vector2 p = origin + new Vector2(u, v) * (2f * extent);
+                    float h = data.GetInterpolatedHeight(u, v) + minY;
+                    float slope = data.GetSteepness(u, v);
+                    float relative = h - baseY;
+                    float n = Noise(p, 60f);
+
+                    // 沙灘只在海岸邊：周圍 14m 內有海、且高度接近海面
+                    float coastal = 0f;
+                    if (hasSea)
+                    {
+                        foreach (Vector2 offset in new[] { Vector2.up, Vector2.down, Vector2.left, Vector2.right })
+                        {
+                            Vector2 q = p + offset * 14f;
+                            Polar(q, out float qa, out float qd);
+                            coastal = Mathf.Max(coastal, 1f - LandAmount(q, qa, qd));
+                        }
+                    }
+                    float sand = coastal * (1f - Smooth(waterY + 2.5f, waterY + 5f, h));
+                    // 亞熱帶海港丘陵：以森林為主，陡坡與高處露出岩石，只有最高的峰頂有少量積雪
+                    float rock = Smooth(34f, 50f, slope) + Smooth(mountain * 0.75f, mountain * 0.95f, relative) * n * 0.7f;
+                    float snow = Smooth(mountain * 1.05f, mountain * 1.2f, relative + (n - 0.5f) * 15f) * (1f - Smooth(40f, 60f, slope));
+                    float forest = Smooth(6f, 22f, relative) * Smooth(0.2f, 0.45f, Noise(p, 45f)) * Mathf.Clamp01(1f - rock);
+                    float grass = Mathf.Max(0f, 1f - sand - rock - snow - forest);
+                    float total = Mathf.Max(1e-4f, sand + grass + forest + rock + snow);
+                    alpha[z, x, 0] = sand / total;
+                    alpha[z, x, 1] = grass / total;
+                    alpha[z, x, 2] = forest / total;
+                    alpha[z, x, 3] = rock / total;
+                    alpha[z, x, 4] = snow / total;
+                }
+            }
+            data.SetAlphamaps(0, 0, alpha);
+            EditorUtility.SetDirty(data);
+            AssetDatabase.SaveAssets();
+
+            GameObject terrainObject = new GameObject("Terrain");
+            terrainObject.transform.SetParent(root, false);
+            terrainObject.transform.position = new Vector3(origin.x, minY, origin.y);
+            Terrain terrain = terrainObject.AddComponent<Terrain>();
+            terrain.terrainData = data;
+            terrain.materialTemplate = TerrainMaterial();
+            terrain.drawInstanced = true;
+            terrain.heightmapPixelError = 5f;
+            terrain.basemapDistance = 1500f;
+            terrain.shadowCastingMode = ShadowCastingMode.Off;
+            terrain.treeDistance = 0f;
+            terrain.detailObjectDistance = 0f;
+            GameObjectUtility.SetStaticEditorFlags(terrainObject, StaticEditorFlags.BatchingStatic);
+        }
+
+        private static float Smooth(float from, float to, float value) => Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(from, to, value));
+
+        private static TerrainLayer Layer(string name, ProceduralTextures.Set set, float tileSize)
+        {
+            string folder = $"{MaterialFolder}/TerrainLayers";
+            EnsureFolder(folder);
+            string path = $"{folder}/{name}.terrainlayer";
+            TerrainLayer layer = AssetDatabase.LoadAssetAtPath<TerrainLayer>(path);
+            if (layer == null)
+            {
+                layer = new TerrainLayer();
+                AssetDatabase.CreateAsset(layer, path);
+            }
+            layer.diffuseTexture = set.Albedo;
+            layer.normalMapTexture = set.Normal;
+            layer.normalScale = 1f;
+            layer.tileSize = new Vector2(tileSize, tileSize);
+            layer.smoothness = name == "Snow" ? 0.35f : 0.05f;
+            layer.metallic = 0f;
+            EditorUtility.SetDirty(layer);
+            return layer;
+        }
+
+        private static Material TerrainMaterial()
+        {
+            string path = $"{MaterialFolder}/Terrain_URP.mat";
+            Material material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material != null) return material;
+            Shader shader = Shader.Find("Universal Render Pipeline/Terrain/Lit");
+            if (shader == null) return null;
+            material = new Material(shader) { name = "Terrain_URP" };
+            AssetDatabase.CreateAsset(material, path);
+            return material;
         }
 
         private void AddTerrainTriangle(FacetBuilder builder, Vector3 a, Vector3 b, Vector3 c)
@@ -618,6 +781,25 @@ public static class OutskirtsSceneryBuilder
                     a.y = Mathf.Max(a.y, top); b.y = Mathf.Max(b.y, top);
                     Vector3 mid = (a + b) * 0.5f;
                     Matrix4x4 frame = Matrix4x4.TRS(mid, Quaternion.LookRotation(b - a), Vector3.one);
+                    builder.AddBox(frame, new Vector3(0f, -0.3f, 0f), new Vector3(w, 0.6f, Vector3.Distance(a, b) + 0.6f), asphalt);
+                    roads.Add((previous, next, w * 0.5f));
+                    previous = next;
+                }
+            }
+            // 大門聯外道路：從空氣牆上的點沿牆面法線往外直直延伸，遇到海岸或山腳停止
+            foreach (Vector2 gate in profile.GateRoads)
+            {
+                Vector2 normal = Mathf.Abs(gate.x - center.x) / half.x > Mathf.Abs(gate.y - center.y) / half.y
+                    ? new Vector2(Mathf.Sign(gate.x - center.x), 0f)
+                    : new Vector2(0f, Mathf.Sign(gate.y - center.y));
+                Vector2 previous = gate;
+                for (float t = 10f; t <= mountainStart; t += 10f)
+                {
+                    Vector2 next = gate + normal * t;
+                    if (!IsLand(next) || Height(next) - baseY > 14f) break;
+                    Vector3 a = Ground(previous), b = Ground(next);
+                    a.y = Mathf.Max(a.y, top); b.y = Mathf.Max(b.y, top);
+                    Matrix4x4 frame = Matrix4x4.TRS((a + b) * 0.5f, Quaternion.LookRotation(b - a), Vector3.one);
                     builder.AddBox(frame, new Vector3(0f, -0.3f, 0f), new Vector3(w, 0.6f, Vector3.Distance(a, b) + 0.6f), asphalt);
                     roads.Add((previous, next, w * 0.5f));
                     previous = next;

@@ -15661,6 +15661,11 @@ MonoBehaviour:
   wallBounce: 0.2
   groundNormalThreshold: 0.6
   batteryHoverSeconds: 600
+  crashBatteryDrainPerSpeed: 0.4
+  crashBatteryDrainMin: 1
+  crashBatteryDrainMax: 5
+  crashBatteryCooldown: 0.5
+  hardLandingSpeed: 8
   propellers:
   - {fileID: 2675576770557039416}
   - {fileID: 6761899274478332192}

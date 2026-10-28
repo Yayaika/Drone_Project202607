@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 
 /// <summary>
-/// 空中障礙：遊戲關卡 (有 GameManager 的場景) 自動加入幾架小飛機 (GameplayAssets.airplanePrefab)，
+/// 空中障礙：遊戲關卡 (有 GameManager 的場景) 自動加入幾架巡航無人機 (GameplayAssets.trafficDronePrefab；未指定時用小飛機 airplanePrefab)，
 /// 在檢查圈附近低空盤旋 (城市生成器關卡沿街道上空繞街區、其他場景為圓形航線)，無人機撞到會墜機。
 /// 航線在生成時以 SphereCast 逐段檢查，選擇「不會碰到任何建築/路燈/檢查圈」的最低高度；
 /// 航線範圍重疊的飛機高度錯開，彼此也不會相撞或穿模。
@@ -25,6 +25,9 @@ public class AircraftTraffic : MonoBehaviour
     [Tooltip("航線與檢查圈之間的水平/垂直安全距離 (m)")]
     [SerializeField] private float checkpointClearance = 2.5f;
     [SerializeField] private Vector2 speedRange = new Vector2(10f, 15f);
+    [Tooltip("交通無人機的寬度 (m)，模型依此縮放")]
+    [SerializeField] private float droneWidth = 1.6f;
+    [SerializeField] private Vector2 droneSpeedRange = new Vector2(5f, 8f);
     [SerializeField] private int pathSegments = 56;
 
     private Bounds area;
@@ -49,8 +52,10 @@ public class AircraftTraffic : MonoBehaviour
     private static void TryCreate()
     {
         if (FindFirstObjectByType<GameManager>() == null || FindFirstObjectByType<AircraftTraffic>() != null) return;
+        // 室內關卡 (工廠) 沒有天空，不放飛機
+        if (FindFirstObjectByType<IndoorLighting>() != null) return;
         GameplayAssets assets = GameplayAssets.Instance;
-        if (assets == null || assets.airplanePrefab == null) return;
+        if (assets == null || (assets.airplanePrefab == null && assets.trafficDronePrefab == null)) return;
         new GameObject("AircraftTraffic").AddComponent<AircraftTraffic>();
     }
 
@@ -66,8 +71,12 @@ public class AircraftTraffic : MonoBehaviour
             yield break;
         }
 
-        GameObject prefab = GameplayAssets.Instance.airplanePrefab;
-        Vector3 planeSize = MeasurePrefab(prefab) * planeScale;
+        GameplayAssets assets = GameplayAssets.Instance;
+        bool drones = assets.trafficDronePrefab != null;
+        GameObject prefab = drones ? assets.trafficDronePrefab : assets.airplanePrefab;
+        Vector3 rawSize = MeasurePrefab(prefab);
+        float scale = drones ? droneWidth / Mathf.Max(0.01f, Mathf.Max(rawSize.x, rawSize.z)) : planeScale;
+        Vector3 planeSize = rawSize * scale;
         float bodyRadius = Mathf.Max(planeSize.x, planeSize.y, planeSize.z) * 0.5f;
         System.Random random = new System.Random(SceneManager.GetActiveScene().name.GetHashCode());
 
@@ -95,13 +104,35 @@ public class AircraftTraffic : MonoBehaviour
         {
             List<Vector3> path = picked[i].Path;
             usedHeights.Add(picked[i].Height);
-            GameObject plane = Instantiate(prefab, path[0], Quaternion.identity, transform);
-            plane.name = $"Aircraft_{i + 1}";
-            plane.transform.localScale = prefab.transform.localScale * planeScale;
+            GameObject plane = drones ? CreateDrone(prefab, scale, path[0]) : Instantiate(prefab, path[0], Quaternion.identity, transform);
+            plane.name = drones ? $"TrafficDrone_{i + 1}" : $"Aircraft_{i + 1}";
+            if (!drones) plane.transform.localScale = prefab.transform.localScale * planeScale;
             Aircraft aircraft = plane.AddComponent<Aircraft>();
-            aircraft.Initialize(path, Mathf.Lerp(speedRange.x, speedRange.y, (float)random.NextDouble()), (float)random.NextDouble());
+            Vector2 speeds = drones ? droneSpeedRange : speedRange;
+            aircraft.Initialize(path, Mathf.Lerp(speeds.x, speeds.y, (float)random.NextDouble()), (float)random.NextDouble(), drones);
         }
         Debug.Log($"[AircraftTraffic] 候選航線 {candidates.Count} 條，生成 {picked.Count} 架飛機，離地高度：{string.Join(", ", usedHeights.ConvertAll(h => $"{h - groundHeight:0}m"))}");
+    }
+
+    /// <summary>
+    /// 交通無人機：模型放在停用的根物件下再實例化，模型上的舊飛控腳本 (會讀玩家輸入) 在 Awake 前就被移除；
+    /// 保留模型的碰撞體 (撞到會墜機)，螺旋槳由 <see cref="PropellerSpinner"/> 轉動。
+    /// </summary>
+    private GameObject CreateDrone(GameObject prefab, float scale, Vector3 position)
+    {
+        GameObject root = new GameObject("TrafficDrone");
+        root.SetActive(false);
+        root.transform.SetParent(transform, false);
+        root.transform.position = position;
+        GameObject model = Instantiate(prefab, root.transform);
+        model.transform.localPosition = Vector3.zero;
+        model.transform.localRotation = Quaternion.identity;
+        model.transform.localScale = prefab.transform.localScale * scale;
+        foreach (MonoBehaviour behaviour in model.GetComponentsInChildren<MonoBehaviour>(true)) DestroyImmediate(behaviour);
+        foreach (Rigidbody modelBody in model.GetComponentsInChildren<Rigidbody>(true)) DestroyImmediate(modelBody);
+        PropellerSpinner.Attach(root);
+        root.SetActive(true);
+        return root;
     }
 
     private class Candidate
@@ -343,9 +374,11 @@ public class Aircraft : MonoBehaviour
     private Rigidbody body;
     private Transform propeller;
     private float bank;
+    private bool multirotor;
 
-    public void Initialize(List<Vector3> route, float flightSpeed, float startFraction)
+    public void Initialize(List<Vector3> route, float flightSpeed, float startFraction, bool isDrone = false)
     {
+        multirotor = isDrone;
         path = route;
         speed = flightSpeed;
         segmentLengths = new float[path.Count];
@@ -361,8 +394,10 @@ public class Aircraft : MonoBehaviour
         body.interpolation = RigidbodyInterpolation.Interpolate;
         if (GetComponentInChildren<Collider>() == null) gameObject.AddComponent<BoxCollider>();
 
+        // 多旋翼的葉片由 PropellerSpinner 轉動；飛機只有一個機鼻螺旋槳
         foreach (Transform child in GetComponentsInChildren<Transform>(true))
         {
+            if (multirotor) break;
             if (child.name.Contains("Fan") || child.name.ToLowerInvariant().Contains("prop")) propeller = child;
         }
 
@@ -381,10 +416,13 @@ public class Aircraft : MonoBehaviour
         Vector3 forward = Tangent(progress);
         Vector3 ahead = Tangent(progress + 0.5f);
 
-        // 依轉彎方向壓坡度 (右轉右翼下沉)
         float turn = Vector3.SignedAngle(new Vector3(forward.x, 0f, forward.z), new Vector3(ahead.x, 0f, ahead.z), Vector3.up);
-        bank = Mathf.Lerp(bank, Mathf.Clamp(-turn * 4f, -35f, 35f), 2f * Time.fixedDeltaTime);
-        Quaternion rotation = Quaternion.LookRotation(forward) * Quaternion.Euler(0f, 0f, bank);
+        // 飛機：依轉彎方向壓坡度 (右轉右翼下沉)；多旋翼：機身前傾飛行、轉彎時輕微側傾
+        float maxBank = multirotor ? 12f : 35f;
+        bank = Mathf.Lerp(bank, Mathf.Clamp(-turn * (multirotor ? 1.5f : 4f), -maxBank, maxBank), 2f * Time.fixedDeltaTime);
+        Vector3 heading = multirotor ? new Vector3(forward.x, 0f, forward.z) : forward;
+        if (heading.sqrMagnitude < 1e-4f) heading = transform.forward;
+        Quaternion rotation = Quaternion.LookRotation(heading) * Quaternion.Euler(multirotor ? 8f : 0f, 0f, bank);
 
         body.MovePosition(position);
         body.MoveRotation(rotation);

@@ -17,7 +17,9 @@ public enum GameSfx
     CargoBroken,
     Crash,
     Warning,
-    DialoguePop
+    DialoguePop,
+    Gunshot,
+    BulletHit
 }
 
 public enum GameMusic
@@ -62,6 +64,8 @@ public static class GameAudio
         GameSfx.Crash => "drone_crash",
         GameSfx.Warning => "warning_beep",
         GameSfx.DialoguePop => "ui_dialogue_pop",
+        GameSfx.Gunshot => "gunshot",
+        GameSfx.BulletHit => "bullet_hit",
         _ => sfx.ToString()
     };
 

@@ -63,6 +63,17 @@
 
 ## 4. 最近完成的工作
 
+- 2026-10-29：敵方軍人（LowPolySoldiers_demo，選單 16 `Editor/SoldierSetup.cs`）：4 種兵種 Prefab（`Assets/Prefabs/Soldier/`：步槍兵、M4 卡賓槍 3 發點放、精確射手（瞄準鏡）、輕機槍 6 發連射），身高縮放為 1.8m，槍械跟著 Idle/Run/Shoot 動作；發現無人機時停下轉身、抬上半身瞄準射擊；子彈為 Bullet FX Pack 的 Trail 模式（Fire/Energy 模式在 URP 不顯示），槍口火光與彈著點用 War FX；無人機中彈扣耐久，歸零被摧毀並重生（`Gameplay/SoldierUnit.cs`、`SoldierRound.cs`、`DroneArmor.cs`）；軍人被炸彈波及或撞擊陣亡，擊斃 +150。港區 9 名、工廠 16 名，依出入口／制高點／巡邏／目標守衛分布，皆在起飛點射程外。Play Mode 確認兵種外觀、射擊命中（耐久 100→79）
+- 2026-10-29：工廠改為工業區（D-035）：A 棟廠房開南側兩座捲門與東西側門；新增 B 棟裝配廠、C 棟四層辦公大樓、儲槽區、管線橋、冷卻塔與煙囪、變電站、停車場、貨車場、北側鋼材堆置棚與門式起重機、圍籬大門、路燈、Terrain 外圍；起飛點移到南側大門；目標 10 個 + 敵機 4 架，限時 420 秒。航線、軍人與工人位置以物理檢測確認無碰撞
+- 2026-10-29：爆炸驚慌（`Gameplay/PanicAlarm.cs`）：工業區工人（`Gameplay/FactoryWorker.cs`，CityPeople 模型＋工具動作）收到爆炸警報（爆炸半徑 ×5）會丟下工具逃跑、之後張望再回去工作；誤傷平民 -300。城市路人也會驚慌慢跑逃離（`CityPedestrians` 新增 Fleeing 狀態）。Play Mode 確認工人逃跑；**城市路人逃跑只確認編譯，未在 Play Mode 實測**
+- 2026-10-28：港區寫實化試做（選單 15 `Editor/PortRealismBuilder.cs`，D-034）：程序化 PBR 貼圖（`Editor/ProceduralTextures.cs`：波浪鋼板、混凝土板、柏油、髒污、海面法線；鋼構用 Download 的 WarFX 金屬貼圖）、ACES 後處理 Volume（`Level/SceneRealism.cs` 執行時開啟攝影機後處理）、外圍改為沿海港口城市（直線海岸接碼頭、南側大門聯外道路、241 棟建築）且遠山改用 Unity Terrain（5 圖層混合）、港區豐富化（貨櫃船、西側貨櫃堆場、東側停車場 26 輛車與貨櫃拖車、大門警衛亭/柵欄/圍籬/護欄/三角錐、四角高桿照明）。Play Mode 截圖確認白天與夜晚。**未在 VR 實機確認效能**
+- 2026-10-28：天空盒沿用素材 `Sky_Anime_03_Day_a`，白天平行光固定對準畫中太陽（方位 56°、仰角 40°，以渲染取樣量測；`EnvironmentProfile.skyboxSuns`），所有使用此天空盒的關卡陰影與天空一致
+- 2026-10-28：夜間照明（`Level/StreetLampLights.cs`，所有室外關卡自動啟用）：路燈燈頭聚光燈 + 發光燈泡、港區高桿照明、行駛車輛左右兩盞頭燈（聚光燈）與紅色尾燈；只點亮最近的 48 盞路燈 / 16 輛車。Play Mode 確認港區 16 盞夜間點亮
+- 2026-10-28：空中飛機改為巡航無人機（Download `drone Black` 模型，`GameplayAssets.trafficDronePrefab`，螺旋槳 `Level/PropellerSpinner.cs`）；港區車流排除混在車輛素材包中的飛機（原本飛機在車道上行駛）、怪獸卡車與軍車
+- 2026-10-28：打擊目標改為寫實設備外觀（投彈＝設備機組、撞擊＝設備機櫃，頂部閃爍警示燈），移除光柱與地面光圈；工廠敵機改用 Download 四軸無人機模型
+- 2026-10-28：玩家無人機在爆炸致命範圍內（半徑 75%、無遮蔽）被炸毀：爆炸特效、殘骸墜落起火，2 秒後在最後檢查點/重新部署點生成新的無人機（`Gameplay/DroneDestruction.cs`、`GameManager.RespawnAfterDestroyed`）。Play Mode 以程式引爆驗證
+- 2026-10-28：新增打擊關卡「工廠・突襲行動」（`Scenes/StrikeFactory.unity`，選單 14 `Editor/FactorySceneBuilder.cs`）：室內廠房、管線迷宮、貨架、生產線、樓梯、辦公樓房間、天車與作業設備；7 個具名高價值目標＋3 架會逃離的敵方無人機（`Level/EnemyDronePatrol.cs`，D-033）；室內關卡不跑晝夜天氣與空中飛機（`Level/IndoorLighting.cs`）；場景內不放說明看板。Play Mode 確認：打擊模式、炸彈無人機、10 個目標、敵機逼近時加速到 8.4 m/s、航線與重新部署點以 SphereCast 檢查無碰撞，Unity 編譯 0 錯誤。**未實際手動飛完一局**
+- 2026-10-28：打擊模式開場機頭改朝出生點正面（原本港區開場背對任務區、正對身後空氣牆）；打擊模式選到無投彈功能的機型或直接開啟打擊場景時，自動改用炸彈無人機並切到打擊模式（`SpawnCtrl`、`LevelCatalog.EnsureModeForCurrentScene`）；開場動畫對話框改為畫面中央偏下、寬度 1340 → 1180（`IntroCutscene`，Play Mode 截圖確認）
 - 2026-10-27：開始選單設置面板美化：深色圓角卡片＋青綠外框、標題／副標題／分隔線、音量列（標籤｜滑桿｜百分比）不再被按鈕蓋住、「操作說明」「製作名單」同尺寸對稱、「返回」置中加大，隱藏「+」裝飾圖示（`PanelEnhancer.EnhanceMainMenuSettings`，執行時套用，場景檔不變）。Play Mode 截圖確認版面，製作名單按鈕可開啟名單面板
 - 2026-10-27：R／手把 B「回到最後檢查點」改為先彈出確認視窗（「確定要重來嗎？」＋確認重來／退出按鈕，預選「退出」，B 鍵＝退出；開啟時暫停並停用操控）（`UI/RespawnConfirmDialog.cs`、`DroneController1.RequestRespawn`）；升降靈敏度第二輪提高（D-032）。dotnet 編譯 0 錯誤，**未在 Play Mode 實測**
 - 2026-10-27：碰撞扣電：撞擊速度 > 1.5 m/s 時依速度扣 1~5% 電量（每 1 m/s 扣 0.4%），連續擦撞 0.5 秒內只扣一次，地面/屋頂著陸低於 5 m/s 不扣；HUD 電池欄位短暫以紅字顯示「-X%」（`DroneController1.ApplyCrashBatteryDrain`、`DroneFlightHUD`）。dotnet 編譯 0 錯誤，**未實際飛行測試**

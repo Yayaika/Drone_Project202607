@@ -28,6 +28,12 @@ public class SpawnCtrl : MonoBehaviour
         PrepareDrone();
     }
 
+    private bool CanBomb(int index)
+    {
+        GameObject drone = _playerDB.datas[index].playerObj;
+        return drone != null && drone.GetComponentInChildren<DroneBombDropper>(true) != null;
+    }
+
     private void PrepareDrone()
     {
         int activeIndex = PlayerIndex;
@@ -39,6 +45,21 @@ public class SpawnCtrl : MonoBehaviour
             activeIndex = 0;
             _playerDB.selectedIndex = 0;
             GameManager1.playerIndex = 0;
+        }
+
+        // 🌟 打擊模式 (投彈 / 撞擊) 要用炸彈無人機：選到沒有投彈功能的機型 (例如直接開啟打擊場景) 時改用資料庫中的炸彈無人機
+        LevelCatalog.EnsureModeForCurrentScene();
+        if (LevelCatalog.SelectedMode == GameModeType.Strike && !CanBomb(activeIndex))
+        {
+            for (int i = 0; i < _playerDB.datas.Length; i++)
+            {
+                if (!CanBomb(i)) continue;
+                Debug.Log($"打擊模式改用炸彈無人機【{_playerDB.datas[i].name}】(Index {i})。");
+                activeIndex = i;
+                _playerDB.selectedIndex = i;
+                LevelCatalog.SelectedDroneCanBomb = true;
+                break;
+            }
         }
 
         GameObject selectedTarget = _playerDB.datas[activeIndex].playerObj;

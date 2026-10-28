@@ -97,6 +97,8 @@ public static class BombExplosion
         GroundFire.Spawn(point);
 
         int hits = BombDamage.Apply(point, radius, owner);
+        // 附近的平民驚慌逃離
+        PanicAlarm.Raise(point, radius * PanicAlarm.RadiusMultiplier);
         if (hits > 0 && GameManager.Instance != null)
         {
             GameManager.Instance.ShowCenterMessage($"命中 ×{hits}", new Color(1f, 0.55f, 0.15f), 0.8f);
@@ -180,6 +182,22 @@ public static class BombDamage
             Transform root = attached != null ? attached.transform : hit.transform;
             if (!handled.Add(root)) continue;
 
+            // 敵方軍人：在半徑內且有視線即陣亡 (掩體後方不受影響)
+            SoldierUnit soldier = root.GetComponent<SoldierUnit>();
+            if (soldier != null)
+            {
+                if (soldier.TryBlast(center, radius)) damaged++;
+                continue;
+            }
+
+            // 工業區平民工人：致命範圍內且有視線即倒地 (誤傷)
+            FactoryWorker worker = root.GetComponent<FactoryWorker>();
+            if (worker != null)
+            {
+                if (worker.TryBlast(center, radius)) damaged++;
+                continue;
+            }
+
             // 打擊模式目標：需有視線 (上方遮蔽會擋住爆炸)
             StrikeTarget strikeTarget = root.GetComponent<StrikeTarget>();
             if (strikeTarget != null)
@@ -213,6 +231,10 @@ public static class BombDamage
                 damaged++;
                 continue;
             }
+
+            // 玩家無人機在致命範圍內 (且沒有遮蔽) 被炸毀並重新生成，範圍外只受衝擊波
+            DroneController1 drone = attached != null ? attached.GetComponent<DroneController1>() : null;
+            if (drone != null && DroneDestruction.TryDestroy(drone, center, radius)) continue;
 
             if (attached != null && !attached.isKinematic)
             {

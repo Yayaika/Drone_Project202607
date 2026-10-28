@@ -10,7 +10,7 @@ public class CityPedestrians : MonoBehaviour
 {
     public static CityPedestrians Instance { get; private set; }
 
-    private enum State { Walking, ToCurb, Waiting, Crossing, Idle, Standing, Injured }
+    private enum State { Walking, ToCurb, Waiting, Crossing, Idle, Standing, Injured, Fleeing }
 
     private class Walker
     {
@@ -33,6 +33,8 @@ public class CityPedestrians : MonoBehaviour
         public Vector3 CrossEnd;
         public int NextBx, NextBz, NextCorner;
         public string CurrentAnimation;
+        // 驚慌逃跑
+        public Vector3 FleeDirection;
     }
 
     private static readonly Vector2Int[] CornerSigns =
@@ -327,6 +329,17 @@ public class CityPedestrians : MonoBehaviour
                     }
                     break;
 
+                case State.Fleeing:
+                    walker.Timer -= dt;
+                    Flee(walker, dt);
+                    if (walker.Timer <= 0f)
+                    {
+                        // 跑完回到原本路線 (走向目前街角)
+                        walker.Target = CornerPoint(walker.Bx, walker.Bz, walker.Corner, walker.Inset);
+                        walker.State = State.Walking;
+                    }
+                    break;
+
                 case State.Idle:
                     walker.Timer -= dt;
                     if (walker.Timer <= 0f)
@@ -340,6 +353,39 @@ public class CityPedestrians : MonoBehaviour
             }
         }
     }
+
+    #region 驚慌逃跑
+
+    private const float FleeSpeed = 4.5f;
+
+    private void OnEnable() => PanicAlarm.OnAlarm += Panic;
+    private void OnDisable() => PanicAlarm.OnAlarm -= Panic;
+
+    /// <summary>附近爆炸：範圍內的路人 (正在過馬路的除外，先走完斑馬線) 往遠離爆炸的方向慢跑數秒</summary>
+    private void Panic(Vector3 point, float radius)
+    {
+        foreach (Walker walker in walkers)
+        {
+            if (walker.Transform == null || walker.State == State.Injured || walker.State == State.Crossing) continue;
+            Vector3 away = walker.Transform.position - point;
+            away.y = 0f;
+            if (away.magnitude > radius) continue;
+            if (away.sqrMagnitude < 0.01f) away = -walker.Transform.forward;
+            walker.FleeDirection = Quaternion.Euler(0f, (float)random.NextDouble() * 50f - 25f, 0f) * away.normalized;
+            walker.Timer = 4f + (float)random.NextDouble() * 3f;
+            walker.State = State.Fleeing;
+        }
+    }
+
+    private void Flee(Walker walker, float dt)
+    {
+        string jog = walker.WalkState != null ? walker.WalkState.Replace("basicWalk", "jogging") : null;
+        if (jog != null && walker.CurrentAnimation != jog) Play(walker, jog, false);
+        walker.Transform.position += walker.FleeDirection * (FleeSpeed * dt);
+        Face(walker, walker.FleeDirection, 1f - Mathf.Exp(-10f * dt));
+    }
+
+    #endregion
 
     #region 炸彈受傷
 

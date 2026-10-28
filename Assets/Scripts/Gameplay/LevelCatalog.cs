@@ -136,6 +136,18 @@ public static class LevelCatalog
             // 投彈 / 撞擊目標由場景中的 StrikeTargetPoint 決定，這裡只設定移動車輛數
             StrikeVehicleTargets = 2,
             StrikeTimeLimit = 240f
+        },
+        new LevelDefinition
+        {
+            Id = "strike_factory",
+            DisplayName = "工廠・突襲行動",
+            Description = "工業區：多棟廠房、儲槽區與管線橋，穿梭廠房內外摧毀高價值目標、追擊敵方無人機，避開守衛火力並避免誤傷工人。",
+            SceneName = "StrikeFactory",
+            SupportedModes = new[] { GameModeType.Strike },
+            CitySeed = 555,
+            // 目標由場景中的 StrikeTargetPoint 與 EnemyDronePatrol 決定，沒有車流
+            StrikeVehicleTargets = 0,
+            StrikeTimeLimit = 420f
         }
     };
 
@@ -167,6 +179,17 @@ public static class LevelCatalog
             }
             return null;
         }
+    }
+
+    /// <summary>
+    /// 直接從編輯器開啟關卡、且目前模式不是該關卡支援的模式時 (例如只支援打擊的場景卻是預設的競速)，改用關卡的第一個模式。
+    /// 由 SpawnCtrl / GameManager 在 Awake 呼叫，重複呼叫沒有影響。
+    /// </summary>
+    public static void EnsureModeForCurrentScene()
+    {
+        if (HasExplicitSelection) return;
+        LevelDefinition level = CurrentLevel;
+        if (level != null && level.SupportedModes.Length > 0 && !level.Supports(SelectedMode)) SelectedMode = level.SupportedModes[0];
     }
 
     public static List<LevelDefinition> LevelsFor(GameModeType mode)

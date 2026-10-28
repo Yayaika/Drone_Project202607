@@ -215,11 +215,11 @@ public class IntroCutscene : MonoBehaviour
             portraitText.text = portraitLetter ?? string.Empty;
         }
         portrait.color = new Color(color.r * 0.35f, color.g * 0.35f, color.b * 0.35f, 0.95f);
-        portrait.rectTransform.anchoredPosition = new Vector2(side * 570f, 0f);
+        portrait.rectTransform.anchoredPosition = new Vector2(side * PortraitX, 0f);
         portraitText.color = color;
-        nameBadge.anchoredPosition = new Vector2(side * 420f, 132f);
+        nameBadge.anchoredPosition = new Vector2(side * NameBadgeX, 132f);
         nameBadgeImage.color = color;
-        lineText.rectTransform.anchoredPosition = new Vector2(-side * 85f, -8f);
+        lineText.rectTransform.anchoredPosition = new Vector2(-side * LineOffsetX, -8f);
 
         if (lineText.text != line)
         {
@@ -303,27 +303,35 @@ public class IntroCutscene : MonoBehaviour
     {
         RectTransform box = RuntimeUI.CreateRect("Dialogue", root);
         dialogueBox = box;
-        Anchor(box, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 118f), new Vector2(1340f, 230f));
+        // 對話框往畫面中央靠攏 (錨點在中央，略低於視線)：VR 頭顯與寬螢幕邊緣都較不需要轉頭/移動視線
+        Anchor(box, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, DialogueCenterY), new Vector2(DialogueWidth, 230f));
         dialogueGroup = box.gameObject.AddComponent<CanvasGroup>();
         dialogueGroup.alpha = 0f;
 
         Image panel = RuntimeUI.CreateImage("Panel", box, Vector2.zero, Vector2.zero, RuntimeUI.PanelColor, RuntimeUI.RoundedSprite);
         RuntimeUI.Stretch(panel.rectTransform);
 
-        portrait = RuntimeUI.CreateImage("Portrait", box, new Vector2(-570f, 0f), new Vector2(170f, 170f), Color.gray, RuntimeUI.RoundedSprite);
+        portrait = RuntimeUI.CreateImage("Portrait", box, new Vector2(-PortraitX, 0f), new Vector2(170f, 170f), Color.gray, RuntimeUI.RoundedSprite);
         portraitText = RuntimeUI.CreateText("Initial", portrait.transform, string.Empty, 96f, Vector2.zero, new Vector2(170f, 170f));
         portraitText.fontStyle = FontStyles.Bold;
 
-        nameBadgeImage = RuntimeUI.CreateImage("NameBadge", box, new Vector2(-420f, 132f), new Vector2(240f, 54f), leftSpeakerColor, RuntimeUI.RoundedSprite);
+        nameBadgeImage = RuntimeUI.CreateImage("NameBadge", box, new Vector2(-NameBadgeX, 132f), new Vector2(240f, 54f), leftSpeakerColor, RuntimeUI.RoundedSprite);
         nameBadge = nameBadgeImage.rectTransform;
         speakerText = RuntimeUI.CreateText("Speaker", nameBadge, string.Empty, 30f, Vector2.zero, new Vector2(240f, 54f));
         speakerText.color = new Color(0.03f, 0.06f, 0.09f, 1f);
         speakerText.fontStyle = FontStyles.Bold;
 
-        lineText = RuntimeUI.CreateText("Line", box, string.Empty, 38f, new Vector2(85f, -8f), new Vector2(1080f, 190f), TextAlignmentOptions.MidlineLeft);
+        lineText = RuntimeUI.CreateText("Line", box, string.Empty, 38f, new Vector2(LineOffsetX, -8f), new Vector2(DialogueWidth - 260f, 190f), TextAlignmentOptions.MidlineLeft);
         lineText.textWrappingMode = TextWrappingModes.Normal;
         lineText.lineSpacing = 12f;
     }
+
+    // 對話框版面 (1920×1080 畫布座標)：框中心在畫面中央下方 DialogueCenterY，頭像在框內左右兩側
+    private const float DialogueWidth = 1180f;
+    private const float DialogueCenterY = -190f;
+    private const float PortraitX = 490f;
+    private const float NameBadgeX = 350f;
+    private const float LineOffsetX = 75f;
 
     private static void Anchor(RectTransform rect, Vector2 min, Vector2 max, Vector2 pivot, Vector2 position, Vector2 size)
     {

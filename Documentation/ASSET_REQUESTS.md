@@ -37,3 +37,19 @@
 | 人行道材質 | `CityGenerator.sidewalkMaterial` | 淺灰純色 | 可選；可用 `Sidewalk_texture.png` |
 | 貨物箱模型 | 搬運任務貨物 | 已使用 `Drone_Cargo_RedCube.prefab`（紅色方塊 placeholder） | 建議補正式紙箱模型 |
 | 送貨點標示（停機坪、地標） | 搬運任務 | 程式產生的半透明光圈與光柱 | 可選 |
+
+## 軍人動畫（放入 `Assets/Animations/Soldier/Clips/`，放好後執行選單「無人機遊戲/16」）
+
+- 骨架必須與 `Download/LowPolySoldiers_demo` 相同：**Generic、3ds Max Biped（根骨骼 `Bip001`）**，槍拿在右手（與 demo_combat 動作相同的持槍方式）。
+- 檔名固定如下（.fbx 或 .anim）；缺少時暫用現有動作代替，補上後自動替換。
+
+| 檔名 | 行為樹狀態 | 內容 | 循環 | 目前替代 |
+|---|---|---|---|---|
+| `soldier_walk` | 巡邏 Patrol | 持槍警戒步行（約 1.6 m/s，原地不位移） | 是 | 跑步動作放慢 0.5 倍（腳步不自然） |
+| `soldier_aim` | 交戰 Combat | 舉槍瞄準待機（槍托抵肩，水平瞄準） | 是 | 射擊動作第一格定格 |
+| `soldier_reload` | 換彈 Reload | 步槍換彈匣（約 2 秒） | 否 | 待機動作 |
+| `soldier_alert` | 發現 Alert／搜索 Search | 持槍左右張望、警戒 | 是 | 待機動作 |
+| `soldier_hit` | 受衝擊 Stagger | 被爆炸衝擊波震退、踉蹌（約 0.6 秒） | 否 | 待機動作加快 |
+| `soldier_death` | 陣亡 Dead | 中彈/被炸倒地（往後倒，最後停在地上） | 否 | 程式讓整個人僵直倒下 |
+
+建議（非必要）：`soldier_aim_up`（槍口朝上 60° 瞄準，對空射擊）可讓對無人機射擊更自然；目前以程式把上半身往上抬代替。

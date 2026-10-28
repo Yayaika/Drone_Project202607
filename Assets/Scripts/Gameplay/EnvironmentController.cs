@@ -59,6 +59,8 @@ public class EnvironmentController : MonoBehaviour
     private Light sun;
     private float baseSunIntensity = 1.2f;
     private Material dayMaterial;
+    /// <summary>天空盒畫有太陽時白天的平行光旋轉 (對準畫中太陽)；沒有對照時為 null，太陽依時間移動</summary>
+    private Quaternion? skyboxSunRotation;
     private Material nightMaterial;
     private float hour;
     private float daylight;
@@ -101,6 +103,8 @@ public class EnvironmentController : MonoBehaviour
         // 只在遊戲關卡啟用 (選單場景有自己的天空)
         if (FindFirstObjectByType<GameManager>() == null) return;
         if (FindFirstObjectByType<EnvironmentController>() != null) return;
+        // 室內關卡 (工廠) 不跑晝夜與天氣：不會在廠房內下雨或變成黑夜
+        if (FindFirstObjectByType<IndoorLighting>() != null) return;
         new GameObject("[EnvironmentController]").AddComponent<EnvironmentController>();
     }
 
@@ -124,7 +128,18 @@ public class EnvironmentController : MonoBehaviour
         if (sun != null) baseSunIntensity = Mathf.Max(0.8f, sun.intensity);
 
         // 天空盒使用材質副本，避免改到資產
-        if (RenderSettings.skybox != null) dayMaterial = new Material(RenderSettings.skybox);
+        if (RenderSettings.skybox != null)
+        {
+            dayMaterial = new Material(RenderSettings.skybox);
+            foreach (EnvironmentProfile.SkyboxSun entry in profile.skyboxSuns)
+            {
+                if (entry.skybox != RenderSettings.skybox) continue;
+                // 天空盒的 _Rotation 會把整張天空繞 Y 軸轉動，太陽方位跟著轉
+                float rotation = entry.skybox.HasProperty("_Rotation") ? entry.skybox.GetFloat("_Rotation") : 0f;
+                skyboxSunRotation = Quaternion.Euler(entry.elevation, entry.yaw - rotation + 180f, 0f);
+                break;
+            }
+        }
         if (profile.nightSkybox != null) nightMaterial = new Material(profile.nightSkybox);
         if (dayMaterial != null) RenderSettings.skybox = dayMaterial;
 
@@ -275,7 +290,10 @@ public class EnvironmentController : MonoBehaviour
             bool isDay = elevation > -0.05f;
             // 白天為太陽 (由東升到西落)；夜晚把同一盞燈轉成斜照的月光
             float pitch = isDay ? Mathf.Clamp(sunAngle, 4f, 176f) : 40f;
-            sun.transform.rotation = Quaternion.Euler(pitch, 330f, 0f);
+            // 白天且天空盒畫有太陽：光從畫中太陽的方向照下來 (陰影與天空一致)
+            sun.transform.rotation = isDay && skyboxSunRotation.HasValue && RenderSettings.skybox == dayMaterial
+                ? skyboxSunRotation.Value
+                : Quaternion.Euler(pitch, 330f, 0f);
             float dayIntensity = baseSunIntensity * Mathf.Clamp01(elevation * 3f) * (1f - cloud * 0.7f);
             float nightIntensity = 0.12f * (1f - cloud * 0.6f);
             sun.intensity = Mathf.Max(dayIntensity, isDay ? 0f : nightIntensity) + flash * 1.5f;

@@ -62,6 +62,8 @@ public static class SynthSfx
             GameSfx.Crash => new[] { new Note(0f, 0f, 0.22f, 0.6f, Wave.Noise), new Note(120f, 50f, 0.12f, 0.5f, Wave.Triangle) },
             GameSfx.Warning => new[] { new Note(1000f, 1000f, 0.1f, 0.35f, Wave.Square), new Note(0f, 0f, 0.06f, 0f), new Note(1000f, 1000f, 0.1f, 0.35f, Wave.Square) },
             GameSfx.DialoguePop => new[] { new Note(520f, 1040f, 0.05f, 0.4f, Wave.Triangle), new Note(1320f, 1560f, 0.07f, 0.3f) },
+            GameSfx.Gunshot => new[] { new Note(0f, 0f, 0.07f, 0.7f, Wave.Noise), new Note(180f, 60f, 0.08f, 0.4f, Wave.Triangle) },
+            GameSfx.BulletHit => new[] { new Note(2400f, 1800f, 0.03f, 0.35f, Wave.Square), new Note(0f, 0f, 0.05f, 0.3f, Wave.Noise) },
             _ => new[] { new Note(880f, 880f, 0.1f) }
         };
 
